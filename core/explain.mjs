@@ -25,7 +25,7 @@ Rules:
 - No treatment advice. Never suggest starting, stopping or changing a medicine, dose, diet or supplement. A medicine printed in the document may be described: what kind of medicine it is and the schedule as printed.
 - Never write a number that is not printed in the input. No typical values, no other ranges, no unit conversions, no statistics. Write small counts as words.
 - Do not judge severity or urgency. No "nothing to worry about", no "dangerous".
-- "questions" are 3 to 6 specific questions the person could ask their doctor about this document. Ask about what the document leaves open or mentions without explaining. Never ask whether a printed instruction (a dose, a schedule, an end date) should be changed, extended or stopped.
+- "questions" are 3 to 6 specific questions the person could ask their doctor about this document. Ask about what the document leaves open or mentions without explaining. Never ask whether a printed instruction (a dose, a schedule, an end date) should be changed, extended or stopped, and never put a treatment or a medicine that is not in the document into a question.
 - "summary" is two or three sentences on what kind of document this is and what it covers. No names, no identifiers.`;
 
 export const EXPLAIN_SCHEMA = {

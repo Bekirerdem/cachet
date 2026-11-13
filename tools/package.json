@@ -7,6 +7,7 @@
     "verify-tee": "node verify-tee.mjs",
     "eval": "node --env-file=../.env eval.mjs",
     "plan": "node --env-file=../.env plan.mjs",
+    "two-readers": "node --env-file=../.env two-readers.mjs",
     "explain": "node --env-file=../.env explain.mjs",
     "read-real": "node --env-file=../.env read-real.mjs",
     "via-relay": "node via-relay.mjs",

@@ -1,18 +1,27 @@
-// Everything that talks to the model. The page is encrypted here, on the device, to a key
+// Everything that talks to the models. The page is encrypted here, on the device, to a key
 // the hardware evidence vouches for; the relay behind /v1 only adds the API key.
+// Two models read every page on their own. Each has its own hardware check, its own key
+// and its own signatures; neither sees what the other copied.
 import { InferenceClient, createGpuEvidenceVerifier } from '@nearai/inference-sdk';
 import { createSession } from '../../core/session.mjs';
 import { parseTranscription, transcribeRequest } from '../../core/reading.mjs';
 import { checkPlan, checkPlain, parsePlain, parsePlan, plainInput, plainRequest, planRequest } from '../../core/plan.mjs';
 import { LANGUAGES, checkExplanation, explainInput, explainRequest, parseExplanation } from '../../core/explain.mjs';
 import { receiptOf } from '../../core/receipt.mjs';
+import { tidyRow } from '../../core/ranges.mjs';
 
 export const MODEL = 'Qwen/Qwen3.8-27B';
+export const SECOND = 'z-ai/glm-5.3-flash';
 export { LANGUAGES };
 
+/** A page with a table of results is confirmed row by row; any other page line by line. */
+export const isLab = (page) => page.rows.length >= 3 || (page.rows.length > 0 && page.text.trim().length < 200);
+export const isEmpty = (page) => page.document_kind === 'not_a_medical_document' || (!isLab(page) && page.text.trim().length < 20);
+
 // What leaves the device is observed where it leaves: the proof screen shows the size of
-// each encrypted request and the first characters the relay could see.
-const wire = { last: null };
+// each encrypted request and the first characters the relay could see. The model name is
+// the one readable field of a request, which tells the two readers' requests apart.
+const wire = { last: {}, onSend: {} };
 const plainFetch = globalThis.fetch.bind(globalThis);
 globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -20,14 +29,17 @@ globalThis.fetch = async (input, init) => {
     const request = input instanceof Request ? input.clone() : new Request(input, init);
     const body = await request.text();
     let seen = '';
+    let model = '';
     try {
-      const content = JSON.parse(body).messages?.at(-1)?.content;
+      const outline = JSON.parse(body);
+      model = outline.model;
+      const content = outline.messages?.at(-1)?.content;
       seen = typeof content === 'string' ? content.slice(0, 72) : '';
     } catch {
       seen = '';
     }
-    wire.last = { encrypted: request.headers.get('x-encrypt-all-fields') === 'true', bytes: body.length, seen };
-    wire.onSend?.(wire.last);
+    wire.last[model] = { encrypted: request.headers.get('x-encrypt-all-fields') === 'true', bytes: body.length, seen };
+    wire.onSend[model]?.(wire.last[model]);
   }
   return plainFetch(input, init);
 };
@@ -44,21 +56,30 @@ function createClient() {
 }
 
 const seconds = (since) => Number(((performance.now() - since) / 1000).toFixed(1));
+const keepChecked = (plan, text) => {
+  const rejected = new Set(checkPlan(plan, text).map((p) => p.split(':')[0]));
+  const kept = {};
+  for (const kind of ['medicines', 'follow_ups', 'cautions']) kept[kind] = plan[kind].filter((_, i) => !rejected.has(`${kind} ${i}`));
+  return { plan: kept, rejected: rejected.size };
+};
 
 export function createEngine() {
-  const session = createSession(createClient);
-  const exchanges = []; // one entry per signed answer: { step, receipt, attestation, wire, seconds }
+  const sessions = { [MODEL]: createSession(createClient), [SECOND]: createSession(createClient) };
+  const exchanges = []; // one entry per signed answer: { step, model, receipt, hardware, wire, seconds }
+  let secondReady = Promise.resolve(false);
 
   async function exchange(step, body, parse, onSend, page = null) {
     const started = performance.now();
-    wire.onSend = onSend;
-    const { verified, parsed, attempts } = await session.send(body, { parse });
+    const { model } = body;
+    wire.onSend[model] = onSend;
+    const { verified, parsed, attempts } = await sessions[model].send(body, { parse });
     const attestation = verified.attestation;
     exchanges.push({
       step,
       page,
+      model,
       receipt: receiptOf(verified),
-      wire: wire.last,
+      wire: wire.last[model],
       seconds: seconds(started),
       attempts,
       hardware: { tcbStatus: attestation.tcbStatus, gpuEvidence: attestation.gpuEvidence, advisoryIds: [...attestation.advisoryIds] },
@@ -68,23 +89,35 @@ export function createEngine() {
 
   return {
     exchanges,
-    /** Hardware evidence for the model, checked in this browser. Nothing has been sent yet. */
+    /**
+     * Hardware evidence for the first reader, checked in this browser. Nothing has been sent yet.
+     * The second reader's evidence is checked alongside; if that fails, the paper is read by one reader.
+     */
     async verifyHardware() {
       const started = performance.now();
-      await session.verify(MODEL);
+      secondReady = sessions[SECOND].verify(SECOND).then(() => true, () => false);
+      await sessions[MODEL].verify(MODEL);
       return seconds(started);
     },
-    /** Step 1: the model copies one page. */
+    /** Step 1: the first reader copies one page. */
     read(imageDataUrl, onSend, page) {
       return exchange('read', transcribeRequest({ model: MODEL, imageDataUrl }), parseTranscription, onSend, page);
     },
     /** Step 2 for letters: the instructions on one page, each with its line. Entries the check rejects are dropped. */
     async plan(text, page) {
-      const plan = await exchange('plan', planRequest({ model: MODEL, text }), parsePlan, undefined, page);
-      const rejected = new Set(checkPlan(plan, text).map((p) => p.split(':')[0]));
-      const kept = {};
-      for (const kind of ['medicines', 'follow_ups', 'cautions']) kept[kind] = plan[kind].filter((_, i) => !rejected.has(`${kind} ${i}`));
-      return { plan: kept, rejected: rejected.size };
+      return keepChecked(await exchange('plan', planRequest({ model: MODEL, text }), parsePlan, undefined, page), text);
+    },
+    /**
+     * The second reader does the same work on its own: its copy of the page and, for a letter,
+     * the instructions it finds in its own copy. Rejects when it cannot be used.
+     */
+    async readSecond(imageDataUrl, page) {
+      if (!(await secondReady)) throw new Error('the second reader did not pass its hardware check');
+      const copy = await exchange('read2', transcribeRequest({ model: SECOND, imageDataUrl }), parseTranscription, undefined, page);
+      copy.rows = copy.rows.map(tidyRow);
+      if (isLab(copy) || isEmpty(copy)) return { page: copy, plan: null };
+      const { plan } = keepChecked(await exchange('plan2', planRequest({ model: SECOND, text: copy.text }), parsePlan, undefined, page), copy.text);
+      return { page: copy, plan };
     },
     /** Step 3 for letters: the confirmed plan in the reader's language. Null when the check rejects it twice. */
     async plain(plan, lang) {

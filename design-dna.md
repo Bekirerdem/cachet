@@ -54,10 +54,12 @@ everywhere; no all-caps labels.
   right; scrolling content; a dock at the bottom holding the one action within thumb reach.
 - **HERO** (start): heading, two lines of copy, the rendered glass slab filling the middle.
 - **STAGE** (hide your name): the photo, centred, with black boxes the person draws; page chips above it.
-- **SLAB + CHECKS** (sending, writing): the person's own page behind a frosted slab, three plates below that fill in as each real check passes.
+- **SLAB + CHECKS** (sending, writing): the person's own page behind a frosted slab, plates below that fill in as each real check passes. Sending has four (hardware, encryption, first reader, second reader), so its slab is the small one.
 - **PAPER + LENS** (same as the paper?): the copied text, blurred, in a paper panel; a clear band over the line being checked; one plate under it with that line's fields; the two decisions in the dock.
+- **TWO READINGS** (same as the paper?, only where the two readers differ): a plate with a peach rim and no clear frost; one plain sentence saying the readers differ; then the two readings. Lab rows stand in two columns, field under field, split by a hairline; longer lines stand one above the other. The characters that differ are marked in peach in both. The dock holds two outlined buttons of equal weight, one per reader, and no filled button: neither reading is the default. A line both readers copied the same carries one quiet mono line saying so and keeps the usual pair.
 - **PLATES** (plan, proof, how it works): a column of plates, each with a mono label; rows open to show the line from the paper.
-- **SHEET** (copied text, photo, sheet for the doctor): a paper-coloured sheet rising over a dimmed, blurred app; the doctor's sheet is the only thing that prints.
+- **SHEET** (copied text, photo, sheet for the doctor): a paper-coloured sheet rising over a dimmed, blurred app; the doctor's sheet is the only thing that prints (A4, 18 mm margins, black on white).
+- **SIDE** (windows 1000 px and wider): the app stays a phone column; to its left, a light display heading, two lines of copy and three short facts under hairlines. Below 1000 px there is only the column.
 
 ## MOTION
 
@@ -100,10 +102,11 @@ Everything else stays behind frost.
 
 A copy that fails any of these is a bad copy.
 
-1. Count filled peach surfaces on any screen: more than the primary action (or its pair) fails.
+1. Count filled peach surfaces on any screen: more than the primary action (or its pair) fails. Where two readers differ there must be none.
 2. Find a line copied from the paper that is not in JetBrains Mono, or an italic grey line that came from the paper: fails.
 3. Grep the stylesheet for `cubic-bezier(`: more than four distinct curves fails.
 4. Blur the screenshot: if the lens is not the first thing the eye lands on in the comparison screen, it fails.
 5. Tap targets: any button, link or chip under 44 px tall fails.
 6. Turn on reduced motion: anything still moving fails.
 7. Look for an icon, an emoji or an uppercase label: any one fails.
+8. Find a line the two readers copied differently that can be confirmed with one tap on "Same": fails.

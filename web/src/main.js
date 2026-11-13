@@ -9,7 +9,8 @@ import labUrl from '../../samples/out/tr-lab.photo.png?url';
 import { isVerificationError } from '@nearai/inference-sdk';
 import { APP_NAME, LANGUAGE_NAMES, PLAN, RTL, STRINGS, pickLanguage } from './i18n.js';
 import { prepareImage, seal } from './image.js';
-import { LANGUAGES, createEngine, recordReceipt } from './engine.js';
+import { LANGUAGES, createEngine, isEmpty, isLab, recordReceipt } from './engine.js';
+import { compareLines, compareRows, differingPart } from '../../core/compare.mjs';
 import { openPoints, readSlots } from '../../core/plan.mjs';
 import { detectDecimalStyle, placeInRange, tidyRow } from '../../core/ranges.mjs';
 
@@ -17,6 +18,7 @@ const STORE = 'papers.v1';
 const EXPLORER = 'https://testnet.nearblocks.io/txns/';
 const MAX_PAGES = 6;
 const KEPT_PAPERS = 30;
+const SECOND_READER_WAIT = 90_000; // after this the paper goes on with one reader, and says so
 const FIELDS = { medicines: ['name', 'strength', 'schedule', 'duration'], follow_ups: ['what', 'when'], cautions: ['text'], row: ['value', 'unit', 'range'] };
 const STEP = { start: 1, prepare: 2, sending: 2, compare: 3, working: 4, plan: 4, proof: 5 };
 
@@ -85,6 +87,8 @@ function render() {
     <footer class="dock" id="dock">${screen.dock ?? ''}</footer>
     ${state.over ? overlay() : ''}`;
   document.documentElement.lang = state.lang;
+  // Beside the phone column on a wide screen: what this is, in a few plain words.
+  document.getElementById('side').innerHTML = `<h2>${t('side_h')}</h2><p>${t('side_p')}</p><ul>${[1, 2, 3].map((n) => `<li><b>${t(`side_${n}`)}</b>${t(`side_${n}t`)}</li>`).join('')}</ul>`;
   screen.after?.();
 }
 
@@ -118,7 +122,7 @@ function startScreen() {
         <button class="link" data-act="sample-letter">${t('sample_letter')}</button>
         <button class="link" data-act="sample-lab">${t('sample_lab')}</button>
       </div>
-      <p class="foot c">${state.note ? esc(state.note) : t('disclaimer')}</p>`,
+      <p class="foot c">${navigator.onLine ? (state.note ? esc(state.note) : t('disclaimer')) : t('offline')}</p>`,
   };
 }
 
@@ -176,8 +180,13 @@ function bindStage() {
     const r = stage.getBoundingClientRect();
     return { x: Math.min(1, Math.max(0, (event.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (event.clientY - r.top) / r.height)) };
   };
+  let tapped = null; // a box under the finger: lifting the finger on it removes it
   stage.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('.box')) return;
+    const box = event.target.closest('.box');
+    if (box) {
+      tapped = { index: Number(box.dataset.box), at: at(event) };
+      return;
+    }
     from = at(event);
     live = document.createElement('div');
     live.className = 'box live';
@@ -191,6 +200,19 @@ function bindStage() {
     Object.assign(live.style, { left: `${Math.min(from.x, to.x) * 100}%`, top: `${Math.min(from.y, to.y) * 100}%`, width: `${Math.abs(to.x - from.x) * 100}%`, height: `${Math.abs(to.y - from.y) * 100}%` });
   });
   const end = (event) => {
+    if (tapped) {
+      // A touch screen does not always follow a tap with a click, so the tap itself removes the box.
+      const to = at(event);
+      const { index } = tapped;
+      const still = Math.abs(to.x - tapped.at.x) < 0.04 && Math.abs(to.y - tapped.at.y) < 0.04;
+      tapped = null;
+      if (still && event.type === 'pointerup') {
+        state.shots[state.shot].boxes.splice(index, 1);
+        state.boxRemovedAt = performance.now();
+        render();
+      }
+      return;
+    }
     if (!from) return;
     const to = at(event);
     const box = { x: Math.min(from.x, to.x), y: Math.min(from.y, to.y), w: Math.abs(to.x - from.x), h: Math.abs(to.y - from.y) };
@@ -208,13 +230,15 @@ const CHECKS = [
   ['hw', 'c_hw', 'c_hw_run'],
   ['enc', 'c_enc', 'c_enc_wait'],
   ['read', 'c_read', 'c_read_wait'],
+  ['two', 'c_two', 'c_two_wait'],
 ];
 
 function checkPlate([id, title, idle], i) {
   const check = state.checks[id] ?? { status: 'waiting' };
-  const word = { waiting: 'waiting', running: 'running', done: 'passed', failed: 'failed' }[check.status];
+  // "alone": the second reader did not answer. Not a failure of the reading, and said in its own words.
+  const word = { waiting: 'waiting', running: 'running', done: id === 'two' ? 'done' : 'passed', failed: 'failed', alone: 'one_reader' }[check.status];
   return `<div class="plate arr ${check.status === 'done' ? 'clear' : ''}" id="check-${id}" style="--i:${i}">
-    <div class="rowp"><b>${t(title)}</b><span class="chip ${check.status === 'waiting' ? 'wait' : ''} ${check.status === 'running' ? 'running' : ''} ${check.status === 'failed' ? 'bad' : ''}">${t(word)}</span></div>
+    <div class="rowp"><b>${t(title)}</b><span class="chip ${check.status === 'waiting' || check.status === 'alone' ? 'wait' : ''} ${check.status === 'running' ? 'running' : ''} ${check.status === 'failed' ? 'bad' : ''}">${t(word)}</span></div>
     <small>${esc(check.detail ?? t(idle))}</small></div>`;
 }
 
@@ -228,14 +252,14 @@ function setCheck(id, status, detail) {
   if (status === 'done' && before !== 'done') document.querySelector(`#check-${id} .chip`)?.classList.add('pop');
 }
 
-const slab = () => (state.photos[state.reading] ? `<div class="slab"><img id="slabimg" src="${state.photos[state.reading]}" alt=""></div>` : `<div class="obj small" style="background-image:url(${frostUrl})"></div>`);
+const slab = (low = false) => (state.photos[state.reading] ? `<div class="slab ${low ? 'low' : ''}"><img id="slabimg" src="${state.photos[state.reading]}" alt=""></div>` : `<div class="obj small" style="background-image:url(${frostUrl})"></div>`);
 
 function sendingScreen() {
   const total = state.photos.length;
   return {
     view: `
       <h1 class="land">${t('send_h')}</h1>
-      ${slab()}
+      ${slab(true)}
       ${total > 1 ? `<span class="lbl" id="pageinfo" style="text-align:center;margin-bottom:6px">${t('page_of', { n: state.reading + 1, total })}</span>` : ''}
       <div id="checks">${CHECKS.map(checkPlate).join('')}</div>`,
   };
@@ -260,6 +284,9 @@ function fail(error) {
   go('error');
 }
 
+const LINE_KINDS = ['medicines', 'follow_ups', 'cautions'];
+const rowLine = (r) => [r.name, r.value, r.unit, r.range, r.flag].filter((part) => String(part ?? '').trim() !== '').join('   ');
+
 /** Where a copied line sits in the page text; whitespace may differ, nothing else. */
 function locate(text, source) {
   const tokens = String(source ?? '').trim().split(/\s+/).filter(Boolean).map(escRe);
@@ -269,6 +296,12 @@ function locate(text, source) {
 }
 
 async function send() {
+  if (!navigator.onLine) {
+    // Nothing can be read without a connection; say so here instead of failing halfway.
+    const note = document.querySelector('#dock .foot');
+    if (note) note.textContent = t('offline_send');
+    return;
+  }
   state.photos = state.shots.map((shot) => seal(shot.canvas, shot.boxes));
   state.hidden = state.shots.reduce((n, shot) => n + shot.boxes.length, 0);
   state.shots = [];
@@ -277,7 +310,8 @@ async function send() {
 }
 
 async function begin() {
-  const paper = { id: Date.now().toString(36), at: Date.now(), planLang: state.planLang, pages: [], entries: [], plain: null, explanation: null, placements: [], exchanges: [], records: [], timings: {}, title: '', hidden: state.hidden };
+  // readers: how many pages two models read, on how many the second did not answer, and on how many lines they parted.
+  const paper = { id: Date.now().toString(36), at: Date.now(), planLang: state.planLang, pages: [], entries: [], plain: null, explanation: null, placements: [], exchanges: [], records: [], timings: {}, title: '', hidden: state.hidden, readers: { pages: 0, alone: 0, apart: 0 } };
   Object.assign(state, { paper, checks: { hw: { status: 'running', detail: t('c_hw_run') } }, reading: 0, active: 0, editing: false, shownPage: -1, synced: 0, error: null, note: null });
   go('sending');
   const started = performance.now();
@@ -296,43 +330,73 @@ async function begin() {
       }
       setCheck('enc', 'running', t('c_enc_wait'));
       setCheck('read', 'waiting');
+      setCheck('two', 'running', t('c_two_run'));
+      // The second reader works on the same page at the same time, on its own. If it fails or takes
+      // too long the paper goes on with one reader.
+      const second = Promise.race([engine.readSecond(state.photos[n], n), pause(SECOND_READER_WAIT).then(() => null)]).catch(() => null);
       const page = await engine.read(state.photos[n], (wire) => {
         if (!wire.encrypted) return;
         setCheck('enc', 'done', t('c_enc_done', { size: size(wire.bytes), seen: wire.seen.slice(0, 18) }));
         setCheck('read', 'running', t('c_read_copy'));
       }, n);
       if (n === 0) {
-        const hardware = engine.exchanges[0].hardware;
+        const { hardware } = engine.exchanges.find((x) => x.step === 'read');
         setCheck('hw', 'done', t('c_hw_done', { tcb: hardware.tcbStatus, gpu: t(hardware.gpuEvidence === 'verified' ? 'verified' : 'not_given'), s: paper.timings.hardware }));
       }
       page.rows = page.rows.map(tidyRow);
-      page.lab = page.rows.length >= 3 || (page.rows.length > 0 && page.text.trim().length < 200);
-      page.skipped = page.document_kind === 'not_a_medical_document' || (!page.lab && page.text.trim().length < 20);
+      page.lab = isLab(page);
+      page.skipped = isEmpty(page);
+      const mine = []; // this page's lines, in the order the comparison returns them
+      let plan = null;
       if (page.skipped) {
         page.paperText = page.text;
       } else if (page.lab) {
-        const lines = page.rows.map((r) => [r.name, r.value, r.unit, r.range, r.flag].filter((part) => String(part ?? '').trim() !== '').join('   '));
+        const lines = page.rows.map(rowLine);
         page.paperText = lines.join('\n');
         let at = 0;
         page.rows.forEach((row, i) => {
-          paper.entries.push({ page: n, kind: 'row', data: { ...row }, paper: lines[i], span: [at, at + lines[i].length], status: 'pending' });
+          mine.push({ page: n, kind: 'row', data: { ...row }, paper: lines[i], span: [at, at + lines[i].length], status: 'pending' });
           at += lines[i].length + 1;
         });
       } else {
         page.paperText = page.text;
         setCheck('read', 'running', t('c_read_plan'));
-        const { plan } = await engine.plan(page.text, n);
-        for (const kind of ['medicines', 'follow_ups', 'cautions']) {
-          for (const data of plan[kind]) paper.entries.push({ page: n, kind, data: { ...data }, paper: data.source, span: locate(page.text, data.source), status: 'pending' });
+        ({ plan } = await engine.plan(page.text, n));
+        for (const kind of LINE_KINDS) {
+          for (const data of plan[kind]) mine.push({ page: n, kind, data: { ...data }, paper: data.source, span: locate(page.text, data.source), status: 'pending' });
         }
       }
+      if (!page.skipped) {
+        setCheck('read', 'done', t('c_read_done'));
+        const other = await second;
+        paper.readers.pages += 1;
+        if (!other) {
+          paper.readers.alone += 1;
+          for (const entry of mine) entry.two = { status: 'single' };
+        } else if (page.lab) {
+          const result = compareRows(page.rows, other.page.rows);
+          mine.forEach((entry, i) => { entry.two = result.rows[i]; });
+          for (const row of result.extra) mine.push({ page: n, kind: 'row', data: { ...row }, paper: rowLine(row), span: null, status: 'pending', two: { status: 'only2' } });
+        } else {
+          const result = compareLines(plan, other.page.text, other.plan ?? undefined);
+          const at = { medicines: 0, follow_ups: 0, cautions: 0 };
+          for (const entry of mine) entry.two = result.lines[entry.kind][at[entry.kind]++];
+          for (const kind of LINE_KINDS) {
+            for (const data of result.extra[kind]) mine.push({ page: n, kind, data: { ...data }, paper: data.source, span: locate(page.text, data.source), status: 'pending', two: { status: 'only2' } });
+          }
+        }
+        paper.readers.apart += mine.filter((entry) => !['agree', 'single'].includes(entry.two.status)).length;
+      }
+      paper.entries.push(...mine);
       delete page.rows; // the rows now live in the entries, where the person confirms them
       paper.pages.push(page);
     }
+    const { readers } = paper;
+    if (readers.pages > 0 && readers.alone === readers.pages) setCheck('two', 'alone', t('c_two_alone'));
+    else setCheck('two', 'done', t(readers.alone ? 'c_two_some' : readers.apart ? 'c_two_diff' : 'c_two_same', { n: readers.apart }));
     if (paper.pages.every((page) => page.skipped)) throw appError(paper.pages.some((page) => page.document_kind === 'not_a_medical_document') ? 'err_not_medical' : 'err_empty');
     const first = paper.pages.find((page) => !page.skipped && !page.lab);
     paper.title = (first?.text.split('\n').map((line) => line.trim()).find((line) => line.length > 2) ?? '').slice(0, 48);
-    setCheck('read', 'done', t('c_read_done'));
     paper.timings.reading = secondsSince(started);
     await pause(reduced ? 0 : 900);
     if (paper.entries.length === 0) await finish();
@@ -379,7 +443,8 @@ function entryPlate(entry) {
   }
   const fields = FIELDS[entry.kind];
   const where = manyPages() ? ` · ${t('page_tag', { n: entry.page + 1 })}` : '';
-  const head = `<span class="lbl">${t('cmp_lens')} · ${t(`k_${entry.kind}`)}${where}</span><span class="quote" dir="auto" style="margin-top:8px">${esc(entry.paper)}</span>`;
+  if (apart(entry) && entry.status === 'pending' && !state.editing) return apartPlate(entry, where);
+  const head = `<span class="lbl">${t(entry.span ? 'cmp_lens' : 'cmp_line')} · ${t(`k_${entry.kind}`)}${where}</span><span class="quote" dir="auto" style="margin-top:8px">${esc(entry.paper)}</span>${readersNote(entry)}`;
   if (state.editing) {
     return `<div class="plate arr">${head}${fields.map((f) => `<label class="field"><span class="lbl">${t(`f_${f}`)}</span><input data-field="${f}" value="${esc(entry.data[f])}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>`).join('')}</div>`;
   }
@@ -391,15 +456,99 @@ function entryPlate(entry) {
   return `<div class="plate arr ${entry.status === 'pending' ? '' : 'clear'}">${head}${body}${entry.status === 'corrected' ? `<small>${t('by_you')}</small>` : ''}</div>`;
 }
 
+/* Two readers. A line they did not copy the same cannot be confirmed with one tap on "Same":
+   both readings are shown and the person says which one the paper has. */
+const twoStatus = (entry) => entry.two?.status ?? 'unknown'; // papers saved before there were two readers
+const apart = (entry) => ['differ', 'missing', 'only2'].includes(twoStatus(entry));
+const agreed = (entry) => !apart(entry);
+const readersNote = (entry) => {
+  const key = { agree: 'two_same', single: 'two_single' }[twoStatus(entry)];
+  return key && entry.status === 'pending' && !state.editing ? `<small class="readers ${key === 'two_same' ? 'ok' : ''}">${t(key)}</small>` : '';
+};
+// The stretch where two readings of a line part, marked in both.
+function marked(mine, theirs) {
+  const [start, endA, endB] = differingPart(mine, theirs);
+  const cut = (text, end) => `${esc(text.slice(0, start))}<mark>${esc(text.slice(start, end))}</mark>${esc(text.slice(end))}`;
+  return [cut(mine, endA), cut(theirs, endB)];
+}
+
+function apartPlate(entry, where) {
+  const status = twoStatus(entry);
+  const label = `<span class="lbl">${t(`k_${entry.kind}`)}${where}</span>`;
+  if (status === 'only2') {
+    const fields = FIELDS[entry.kind].filter((f) => entry.kind !== 'cautions' && String(entry.data[f] ?? '').trim() !== '');
+    return `<div class="plate warn arr">${label}<div class="item">${t('two_only2')}</div>
+      <div class="from"><span class="lbl">${t('reader2')}</span><span class="quote" dir="auto" style="margin-top:6px">${esc(entry.paper)}</span>${fields.map((f) => `<div class="rowp sm"><span class="k">${t(`f_${f}`)}</span><b class="r">${esc(entry.data[f])}</b></div>`).join('')}</div></div>`;
+  }
+  const other = entry.two.other ?? null;
+  if (entry.kind === 'row') {
+    const differs = new Set(entry.two.fields ?? []);
+    const shown = ['name', 'value', 'unit', 'range', 'flag'].filter((f) => f === 'name' || f === 'value' || String(entry.data[f] ?? '').trim() !== '' || String(other?.[f] ?? '').trim() !== '');
+    // In a field the readers copied differently, the characters that differ are marked in both columns.
+    const cell = (f, side) => {
+      const mine = String(entry.data[f] ?? '');
+      const theirs = String(other?.[f] ?? '');
+      const text = differs.has(f) ? marked(mine, theirs)[side] : esc(side === 0 ? mine : theirs);
+      return `<span class="cell ${differs.has(f) ? 'diff' : ''}" dir="auto"><i>${t(`r_${f}`)}</i>${text || '&nbsp;'}</span>`;
+    };
+    const column = (title, side) => `<div class="reading"><span class="lbl">${title}</span>${side === 0 || other ? shown.map((f) => cell(f, side)).join('') : `<span class="cell gen">${t('two_nothing')}</span>`}</div>`;
+    return `<div class="plate warn arr">${label}<div class="item">${t(other ? 'two_differ' : 'two_missing')}</div><div class="duo">${column(t('reader1'), 0)}${column(t('reader2'), 1)}</div></div>`;
+  }
+  const theirs = other?.line ?? '';
+  const [a, b] = theirs ? marked(entry.paper, theirs) : [esc(entry.paper), ''];
+  return `<div class="plate warn arr">${label}<div class="item">${t(theirs ? 'two_differ' : 'two_missing')}</div>
+    <div class="from"><span class="lbl">${t('reader1')}</span><span class="quote marks" dir="auto" style="margin-top:6px">${a}</span></div>
+    <div class="from"><span class="lbl">${t('reader2')}</span>${theirs ? `<span class="quote marks" dir="auto" style="margin-top:6px">${b}</span>` : `<span class="gen" style="display:block;margin-top:6px;font-size:13px">${t('two_nothing')}</span>`}</div></div>`;
+}
+
 function compareDock(entry) {
   const count = `<p class="foot c" style="margin-top:8px">${t('cmp_progress', { n: decided(), total: entries().length })}</p>`;
   if (!entry) {
     return `<button class="btn" data-act="finish" ${kept().length ? '' : 'disabled'}>${t('make')}</button><div class="links"><button class="link" data-act="prev">${t('prev')}</button></div>`;
   }
   if (state.editing) return `<div class="pair"><button class="btn" data-act="save">${t('save')}</button><button class="btn ghost" data-act="cancel">${t('cancel')}</button></div>${count}`;
-  const rowsLeft = entries().some((e) => e.status === 'pending' && e.kind === 'row');
+  const back = state.active > 0 ? `<button class="link" data-act="prev">${t('prev')}</button>` : '';
+  if (apart(entry) && entry.status === 'pending') {
+    const status = twoStatus(entry);
+    const hasOther = status === 'differ' && (entry.kind === 'row' || Boolean(entry.two.other?.line));
+    const buttons = status === 'only2'
+      ? `<button class="btn" data-act="pick-1">${t('two_keep')}</button><button class="btn ghost" data-act="leave">${t('two_drop')}</button>`
+      : hasOther
+        ? `<button class="btn ghost" data-act="pick-1">${t('pick1')}</button><button class="btn ghost" data-act="pick-2">${t('pick2')}</button>`
+        : `<button class="btn ghost" data-act="pick-1">${t('pick1')}</button><button class="btn ghost" data-act="edit">${t('correct')}</button>`;
+    return `<div class="pair">${buttons}</div>
+      <div class="links">${hasOther || status === 'only2' ? `<button class="link" data-act="edit">${t('correct')}</button>` : ''}${status === 'only2' ? '' : `<button class="link" data-act="leave">${t('leave')}</button>`}${back}</div>${count}`;
+  }
+  const rowsLeft = entries().some((e) => e.status === 'pending' && e.kind === 'row' && agreed(e) && e !== entry);
   return `<div class="pair"><button class="btn" data-act="same">${t('same')}</button><button class="btn ghost" data-act="edit">${t('correct')}</button></div>
-    <div class="links"><button class="link" data-act="leave">${t('leave')}</button>${state.active > 0 ? `<button class="link" data-act="prev">${t('prev')}</button>` : ''}${entry.kind === 'row' && rowsLeft ? `<button class="link" data-act="all-same">${t('all_same')}</button>` : ''}</div>${count}`;
+    <div class="links"><button class="link" data-act="leave">${t('leave')}</button>${back}${entry.kind === 'row' && rowsLeft ? `<button class="link" data-act="all-same">${t('all_same')}</button>` : ''}</div>${count}`;
+}
+
+/** The person says which of two readings the paper has. */
+function pick(which) {
+  const entry = entries()[state.active];
+  if (!entry) return;
+  entry.picked = which;
+  if (which === 2 && twoStatus(entry) === 'differ') {
+    const other = entry.two.other;
+    if (entry.kind === 'row') {
+      entry.data = { ...other };
+      entry.paper = rowLine(other);
+    } else if (other.data) {
+      entry.data = { ...other.data };
+      entry.paper = other.data.source;
+    } else {
+      // The second reader copied the line but did not list it: its wording becomes the line, and
+      // the person fills in the parts from the paper.
+      entry.paper = other.line;
+      entry.data.source = other.line;
+      state.editing = true;
+      paintCompare();
+      return;
+    }
+    entry.span = null;
+  }
+  decide('same');
 }
 
 async function paintCompare(swap = true) {
@@ -415,6 +564,13 @@ async function paintCompare(swap = true) {
   document.getElementById('cmpdock').innerHTML = compareDock(entry);
   moveLens(entry);
   if (state.editing) box.querySelector('input')?.focus();
+  // Two readings side by side are tall: bring them into view instead of leaving them under the dock.
+  else if (entry && apart(entry) && entry.status === 'pending') {
+    const view = document.getElementById('view');
+    const over = box.getBoundingClientRect().bottom - view.getBoundingClientRect().bottom + 10;
+    const room = box.getBoundingClientRect().top - view.getBoundingClientRect().top - 8;
+    if (over > 0) view.scrollBy({ top: Math.min(over, room), behavior: reduced ? 'auto' : 'smooth' });
+  }
 }
 
 function moveLens(entry) {
@@ -501,7 +657,7 @@ function workDone(id, ok) {
 
 /** Moves the engine's new signed answers into the paper, each with a place for its chain record. */
 function syncExchanges() {
-  const fresh = state.engine.exchanges.slice(state.synced).map(({ step, page, receipt, wire, seconds, hardware }) => ({ step, page, receipt, wire, seconds, hardware }));
+  const fresh = state.engine.exchanges.slice(state.synced).map(({ step, page, model, receipt, wire, seconds, hardware }) => ({ step, page, model, receipt, wire, seconds, hardware }));
   state.synced = state.engine.exchanges.length;
   state.paper.exchanges.push(...fresh);
   state.paper.records.push(...fresh.map(() => ({ status: 'recording' })));
@@ -536,7 +692,7 @@ async function finish() {
     const explanation = await engine.explain(merged, placements, paper.planLang);
     workDone('w_explain', explanation !== null);
     // A paper written again in another language keeps its signed copies and replaces the two texts.
-    const keep = paper.exchanges.map((x) => x.step === 'read' || x.step === 'plan');
+    const keep = paper.exchanges.map((x) => ['read', 'plan', 'read2', 'plan2'].includes(x.step));
     paper.exchanges = paper.exchanges.filter((_, i) => keep[i]);
     paper.records = paper.records.filter((_, i) => keep[i]);
     Object.assign(paper, { plain, explanation, placements });
@@ -657,6 +813,15 @@ function resultsPlan(start) {
   return `${count}${group(p('g_out'), ['above', 'below', 'edge'], start)}${group(p('g_in'), ['in'], start + 1)}${group(p('g_unknown'), ['unknown'], start + 2)}`;
 }
 
+/** One sentence on how many models read the paper and what the person had to settle. */
+function readersLine(paper) {
+  const r = paper.readers;
+  if (!r || r.pages === 0) return '';
+  if (r.alone === r.pages) return t('two_note_alone');
+  const some = r.alone ? ` ${t('two_note_some', { n: r.alone })}` : '';
+  return t(r.apart ? 'two_note_apart' : 'two_note_same', { n: r.apart }) + some;
+}
+
 function planScreen() {
   const { paper } = state;
   const lines = hasLines();
@@ -666,6 +831,7 @@ function planScreen() {
     kept().length === 0 ? t('no_plan') : '',
     (lines && paper.plain === null) || paper.explanation === null ? t('no_plain') : '',
     results ? t('by_code') : '',
+    readersLine(paper),
     t('legend'),
   ].filter(Boolean);
   return {
@@ -745,7 +911,7 @@ function howHtml() {
     <div class="plate"><span class="lbl">${t('how_does')}</span><div class="item">${t('how_does_t')}</div></div>
     <div class="plate"><span class="lbl">${t('how_not')}</span><div class="item">${t('how_not_t')}</div></div>
     <div class="plate"><span class="lbl">${t('how_privacy')}</span>${list('how_privacy', 4)}</div>
-    <div class="plate"><span class="lbl">${t('how_code')}</span>${list('how_code', 4)}</div>
+    <div class="plate"><span class="lbl">${t('how_code')}</span>${list('how_code', 5)}</div>
     <div class="plate"><span class="lbl">${t('how_limits')}</span>${list('how_limits', 4)}</div>`;
 }
 
@@ -788,18 +954,21 @@ function paintRecords() {
 
 function proofScreen() {
   const { exchanges } = state.paper;
-  const first = exchanges[0];
-  const hardware = first.hardware;
+  // One block per model that answered: its hardware evidence, its name, the key that signed its answers.
+  const modelOf = (x) => x.model ?? x.receipt.model;
+  const firstModel = modelOf(exchanges.find((x) => x.step === 'read') ?? exchanges[0]);
+  const models = [...new Set([firstModel, ...exchanges.map(modelOf)])].map((model) => exchanges.find((x) => modelOf(x) === model));
+  const modelPlate = (x, n) => `<div class="plate clear arr" style="--i:0">${models.length > 1 ? `<span class="lbl">${t(n === 0 ? 'reader1' : 'reader2')}</span>` : ''}
+        <div class="rowp"><span><b>${t('pr_hw')}</b><code>Intel TDX: ${esc(x.hardware.tcbStatus)} · NVIDIA: ${t(x.hardware.gpuEvidence === 'verified' ? 'verified' : 'not_given')}</code></span><span class="chip">${t('passed')}</span></div>
+        <div class="rowp"><span><b>${t('pr_model')}</b><code>${esc(x.receipt.model)}</code></span><span class="chip">${t('verified')}</span></div>
+        <div class="rowp"><span><b>${t('pr_key')}</b><code>${short(x.receipt.signer)}</code></span></div>
+      </div>`;
   return {
     back: ['plan', 'back'],
     view: `
       <h1 class="land">${t('proof_h')}</h1>
       <div class="obj small" style="background-image:url(${frostUrl})"></div>
-      <div class="plate clear arr" style="--i:0">
-        <div class="rowp"><span><b>${t('pr_hw')}</b><code>Intel TDX: ${esc(hardware.tcbStatus)} · NVIDIA: ${t(hardware.gpuEvidence === 'verified' ? 'verified' : 'not_given')}</code></span><span class="chip">${t('passed')}</span></div>
-        <div class="rowp"><span><b>${t('pr_model')}</b><code>${esc(first.receipt.model)}</code></span><span class="chip">${t('verified')}</span></div>
-        <div class="rowp"><span><b>${t('pr_key')}</b><code>${short(first.receipt.signer)}</code></span></div>
-      </div>
+      ${models.map(modelPlate).join('')}
       <div class="plate clear arr" style="--i:1"><span class="lbl">${t('pr_answers')}</span>
         ${exchanges.map((x) => `<div class="rowp"><span><b>${stepName(x)}</b><code>${short(x.receipt.response_hash)}${x.wire ? ` · ${t('sent_as', { size: size(x.wire.bytes) })}` : ''}</code></span><span class="chip">${t('signed')}</span></div>`).join('')}
       </div>
@@ -865,12 +1034,14 @@ const ACTIONS = {
   print: () => { document.getElementById('print').innerHTML = doctorHtml(); window.print(); },
   share: shareDoctor,
   same: () => decide('same'),
+  'pick-1': () => pick(1),
+  'pick-2': () => pick(2),
   leave: () => decide('left'),
   edit: () => { state.editing = true; paintCompare(); },
   cancel: () => { state.editing = false; paintCompare(); },
   save: saveEdit,
   prev: () => { state.active = Math.max(0, Math.min(state.active, entries().length) - 1); state.editing = false; paintCompare(); },
-  'all-same': () => { for (const e of entries()) if (e.status === 'pending' && e.kind === 'row') e.status = 'same'; const next = entries().findIndex((e) => e.status === 'pending'); state.active = next === -1 ? entries().length : next; paintCompare(); },
+  'all-same': () => { for (const e of entries()) if (e.status === 'pending' && e.kind === 'row' && agreed(e)) e.status = 'same'; const next = entries().findIndex((e) => e.status === 'pending'); state.active = next === -1 ? entries().length : next; paintCompare(); },
   finish,
   plan: () => go('plan'),
   proof: () => go('proof'),
@@ -888,8 +1059,11 @@ app.addEventListener('click', (event) => {
   }
   const box = event.target.closest('[data-box]');
   if (box) {
-    shot().boxes.splice(Number(box.dataset.box), 1);
-    render();
+    // Reached by keyboard, or by a click that follows a tap already handled on the stage.
+    if (performance.now() - (state.boxRemovedAt ?? -1e9) > 500) {
+      shot().boxes.splice(Number(box.dataset.box), 1);
+      render();
+    }
     return;
   }
   const el = event.target.closest('[data-act]');
@@ -911,6 +1085,22 @@ app.addEventListener('change', (event) => {
 });
 addEventListener('resize', () => { if (state.screen === 'compare') moveLens(entries()[state.active]); });
 
-if (import.meta.env.PROD && 'serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+addEventListener('online', () => { if (state.screen === 'start') render(); });
+addEventListener('offline', () => { if (state.screen === 'start') render(); });
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+      // The files of this first visit were fetched before the worker existed. Hand it their
+      // addresses so the app opens without a connection from the next visit on.
+      const { active } = await navigator.serviceWorker.ready;
+      const mine = performance.getEntriesByType('resource').map((entry) => entry.name).filter((name) => name.startsWith(`${location.origin}/assets/`));
+      active?.postMessage({ keep: mine });
+    } catch {
+      // The app works without the worker; it only cannot open offline.
+    }
+  });
+}
 
 render();

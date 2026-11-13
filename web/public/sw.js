@@ -13,6 +13,12 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
 });
 
+// The page tells the worker which of the app's own files it loaded before the worker was there.
+self.addEventListener('message', (event) => {
+  const keep = (event.data?.keep ?? []).filter((address) => isShell(new URL(address)));
+  if (keep.length > 0) event.waitUntil(caches.open(CACHE).then((cache) => Promise.all(keep.map((address) => cache.match(address).then((saved) => saved ?? cache.add(address))))));
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);

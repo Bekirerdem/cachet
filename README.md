@@ -29,8 +29,8 @@ Cachet is built around that finding. The model is never asked to rewrite the pap
 1. **Photo.** You photograph each page. The image is scaled down and re-encoded on the phone, which drops location and camera data.
 2. **Hide your name.** You drag a box over the lines that identify you. The boxes are burned into the pixels before encryption, so the model never receives that area.
 3. **Sealed sending.** The browser fetches the hardware evidence for the model (Intel TDX, NVIDIA GPU), verifies it, and encrypts the page to the key that the evidence vouches for. Our server forwards ciphertext and adds the API key. It refuses any request that is not encrypted this way.
-4. **Copy.** A vision model inside the enclave copies what is printed: text, lab rows, values, ranges. It is told to copy, not to explain.
-5. **Same as the paper?** You compare every line with your paper and confirm or correct it. A line you do not confirm does not enter the plan.
+4. **Copy, twice.** Two vision models, each inside its own enclave, copy what is printed: text, lab rows, values, ranges. They work on their own; neither sees the other's copy. They are told to copy, not to explain.
+5. **Same as the paper?** Code compares the two copies character by character. You compare every line with your paper and confirm or correct it. Where the two readers differ you see both readings, with the differing characters marked, and choose; such a line cannot be confirmed with one tap. A line you do not confirm does not enter the plan.
 6. **Plan.** From the confirmed text, the model points at the instructions: medicines, follow-ups, cautions. Each entry must carry the exact line it came from. Code then checks every entry against the page (see below) and retells it in your language.
 7. **Proof.** You see what was verified. The model's signature over the encrypted exchange is recorded on NEAR, where the contract verifies it again.
 
@@ -46,6 +46,7 @@ The result stays on your phone. There is no account, and our server stores nothi
 | Did the plain-language version add a number? | Every number in a retold entry must appear in that entry's own source line. | [`core/plan.mjs`](core/plan.mjs) `checkPlain` |
 | Did the explanation of a lab page add a number? | Every number must be printed on the page. | [`core/explain.mjs`](core/explain.mjs) `checkExplanation` |
 | What does the paper leave out? | A medicine without a printed dose, schedule or duration becomes a question for the doctor. | [`core/plan.mjs`](core/plan.mjs) `openPoints` |
+| Did two independent readers copy the line the same? | Lab rows are matched by test name and compared field by field; for a letter, each line must be found in the second reader's copy with its medicine, dose, schedule and duration inside it. Spacing, case and dash shape do not count; a digit, a letter or a separator does. | [`core/compare.mjs`](core/compare.mjs) |
 | Did the reply come from the attested model? | ed25519 signature over `model:sha256(request):sha256(response)`, checked in the browser and in the contract. | [`core/receipt.mjs`](core/receipt.mjs), [`contract/src/lib.rs`](contract/src/lib.rs) |
 
 One thing does come from the model's general knowledge: the kind of a medicine ("antibiotic", "blood pressure medicine"). The app shows it in a different style from text that comes from the paper, and it can be empty.
@@ -61,10 +62,10 @@ No account, no key, no wallet. The samples are fictional.
 | Open the page | "Home from the hospital. What do the papers say?" and one main button |
 | Tap **Try a sample letter** | "Hide your name" with the photographed German discharge letter |
 | Tap **Hide the top strip**, then **Send the page sealed** | A black box over the top of the page, then three checks arriving: "Hardware checked, passed" with the seconds it took on your device, "Page encrypted" with the size of the ciphertext that left, "Model reading" |
-| Wait about 20 seconds | "Same as the paper?" with the first line under the lens: `Amoxicillin/Clavulansäure 875/125 mg 1-0-1 bis einschließlich 10.11.2026.` split into medicine, dose, when, for how long |
+| Wait about 30 seconds | A fourth check, "Second reader", ending with "Both readers copied every line the same." Then "Same as the paper?" with the first line under the lens: `Amoxicillin/Clavulansäure 875/125 mg 1-0-1 bis einschließlich 10.11.2026.` split into medicine, dose, when, for how long |
 | Tap **Same** for each of the 5 lines (or **Correct it**, or **Leave this line out**), then **Make my plan** | "Your home plan": Morning with Amoxicillin/Clavulansäure 875/125 mg and Ramipril 5 mg, Evening with Amoxicillin/Clavulansäure and Atorvastatin 20 mg, the X-ray check-up in 6 weeks, when to come back, and "Ramipril: the paper does not say for how long" |
 | Tap any line of the plan | The line of the paper it came from |
-| Tap **See the proof** | Intel TDX `UpToDate`, NVIDIA `verified`, the model's signing key, four signed answers, and four chain records, each a link to the transaction on NEAR testnet |
+| Tap **See the proof** | Intel TDX `UpToDate`, NVIDIA `verified`, both readers with their models and signing keys, six signed answers, and six chain records, each a link to the transaction on NEAR testnet |
 | Choose another language under **Write it in another language** | The same plan rewritten and checked again; Arabic is laid out right to left |
 | Go home and tap **Try a sample lab page** | 12 rows of a Turkish lab report; after you confirm them, each row is placed in, above or below the range printed on the page |
 
@@ -72,7 +73,7 @@ No account, no key, no wallet. The samples are fictional.
 
 | Do | See |
 |---|---|
-| `cd core && node --test` | 20 tests pass: number and range parsing, the plan checks, the explanation check |
+| `cd core && node --test` | 30 tests pass: number and range parsing, the plan checks, the explanation check, the comparison of two readers |
 | `cd tools && npm install && npm run verify-tee` | Your computer verifies the gateway and both models against Intel and NVIDIA, ending with `VERIFIED`. No key needed |
 | `curl -X POST https://cachet.l3ekirerdem.workers.dev/v1/chat/completions -H "content-type: application/json" -d '{"model":"Qwen/Qwen3.8-27B","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}'` | `400`: "This relay only forwards requests that are encrypted to the model on the device." |
 | `cd contract && cargo test` | 6 tests pass on a real receipt: accepted once; a repeat, a changed hash, another model name, an unknown key and a non-owner are refused |
@@ -115,6 +116,18 @@ All runs went through the same path as the app: attestation verified, request en
 | 4 fictional letter pages with known medicines | 10 of 10 medicine entries exact (name, strength, schedule, duration), 0 extra |
 | 9 pages of published sample letters (German, English) | All read. Two pages checked by eye: medicines exact; one diet line was left out of the cautions |
 | Retelling in Turkish, all 13 pages | 0 entries rejected by the code check |
+
+**Two readers** (Qwen/Qwen3.8-27B and z-ai/glm-5.3-flash on the same page, compared by `core/compare.mjs`; `npm run two-readers` in `tools/`):
+
+| Pages | Lines | Not copied the same |
+|---|---|---|
+| 14 fictional sample pages | 126 | 0 |
+| 2 pages of published sample letters (German, English) | 13 | 0 |
+| A real phone photo of a Turkish blood count | 18 rows | 3: a unit read as `uL` by one and `µl` by the other (twice), and one test name |
+| A handwritten Spanish prescription | 4 medicines | 4: every medicine name or dose differs between the readers (`Fufroint` against `Tofranil`, `Bylodace` against `Bylodose`) |
+| A handwritten French prescription, out of focus | 3 medicines | 3, plus 4 lines only the second reader listed |
+
+A wrong copy of handwriting used to pass every check, because the checks compared the plan with the copy and the copy itself was wrong. With two readers those lines now arrive marked as a disagreement. In a run of the same Spanish page through the app, three of the four medicines were marked and one was copied the same by both.
 
 **Published sample documents** (29 pages from 21 documents found online: labs, letters, imaging, prescriptions; not included in this repository): 28 pages read on the first pass, the last one on a retry. On a real phone photo of a Turkish blood count, the in-range decision in code agreed with the mark the lab printed on 18 of 18 rows. A handwritten prescription and a cropped typewritten letter were reported by the model as partly unreadable, which is the intended behaviour.
 
@@ -186,7 +199,7 @@ AI assistance: the code was written with Claude Code, directed and reviewed by t
 - The kind of a medicine is general knowledge from the model, not from the paper.
 - Testnet only. The receipts contract trusts an owner-maintained list of enclave keys.
 - Not yet used on a physical phone by anyone but the author's browser tests: camera capture, finger-drawn boxes, installing to the home screen and the share sheet were exercised in desktop Chrome at phone size only.
-- One model reads each page. A second, independent reading that flags disagreements is not built.
+- Two models read each page, but both can miss the same line or misread it the same way. If the second reader does not answer within 90 seconds the paper goes on with one reader, and the app says so on the comparison, the plan and the proof.
 - The code-written words of the plan in German, Spanish, French, Arabic, Russian and Japanese are unreviewed translations.
 - The public demo runs on a fixed credit: 800 model calls a day, then it answers "today's free readings are used up".
 
