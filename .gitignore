@@ -1,0 +1,17 @@
+node_modules/
+dist/
+target/
+.wrangler/
+
+# secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local
+
+# local only: measurement output, real test documents, design boards
+tools/results/
+testdocs/
+design/
+samples/out/*.html

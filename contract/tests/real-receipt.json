@@ -1,0 +1,7 @@
+{
+  "model": "Qwen/Qwen3.8-27B",
+  "request_hash": "c2a09268d962b01a445e799b80b0df1e2ec3e23ec09aae21abd343dae375f1cd",
+  "response_hash": "332b6f373927a897d645c740ecc571bb9b1006b60bbb75d07ec1aad7041d2ae7",
+  "signature": "db164c71bcbaea5da357e7c2a8c3651ebf7217f76c3baadf2b6fce49405dfabb1a16cd4b20ac4a2960cd4085679da3680ba8a86727567dc28699bd0ad7b6b708",
+  "signer": "89154a43a47684742c3d1753252bb6f49f61da9d8c84fc9b1def2df130cb2d93"
+}

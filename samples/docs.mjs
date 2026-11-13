@@ -1,0 +1,178 @@
+// Fictional sample documents with known contents. Every person, lab and value
+// here is invented. The same data renders the page images and scores the model.
+//
+// Row: [name as printed, value as printed, unit, reference range as printed, flag as printed]
+
+export const DOCS = [
+  {
+    id: 'tr-lab',
+    lang: 'tr',
+    kind: 'lab',
+    lab: 'Örnek Tıp Laboratuvarı',
+    title: 'Tahlil Sonuç Raporu',
+    patient: [['Hasta', 'Deniz Örnek'], ['Doğum Tarihi', '14.03.1988'], ['Numune Tarihi', '03.11.2026'], ['Protokol No', 'KURGU-00417']],
+    head: ['Tetkik', 'Sonuç', 'Birim', 'Referans Aralığı', ''],
+    sections: [
+      ['HEMOGRAM', [
+        ['Hemoglobin (HGB)', '11,2', 'g/dL', '12,0 - 16,0', 'L'],
+        ['Lökosit (WBC)', '7,4', '10^3/µL', '4,0 - 10,0', ''],
+        ['Trombosit (PLT)', '312', '10^3/µL', '150 - 400', ''],
+      ]],
+      ['BİYOKİMYA', [
+        ['Glukoz (Açlık)', '104', 'mg/dL', '70 - 100', 'H'],
+        ['HbA1c', '5,9', '%', '4,0 - 5,6', 'H'],
+        ['LDL Kolesterol', '162', 'mg/dL', '< 130', 'H'],
+        ['HDL Kolesterol', '48', 'mg/dL', '> 40', ''],
+        ['ALT', '22', 'U/L', '0 - 33', ''],
+        ['Kreatinin', '0,78', 'mg/dL', '0,50 - 0,90', ''],
+      ]],
+      ['HORMON / VİTAMİN', [
+        ['TSH', '2,1', 'µIU/mL', '0,27 - 4,20', ''],
+        ['Ferritin', '9', 'ng/mL', '13 - 150', 'L'],
+        ['Vitamin B12', '265', 'pg/mL', '197 - 771', ''],
+      ]],
+    ],
+    footer: 'Kurgu örnek belge. Gerçek bir hastaya ait değildir.',
+  },
+  {
+    id: 'de-lab',
+    lang: 'de',
+    kind: 'lab',
+    lab: 'Musterlabor Rheinufer MVZ',
+    title: 'Laborbefund',
+    patient: [['Patient', 'Max Mustermann'], ['Geb.-Datum', '02.09.1961'], ['Abnahme', '05.11.2026 08:12'], ['Auftrag', 'FIKTIV-88213']],
+    head: ['Untersuchung', 'Ergebnis', 'Einheit', 'Referenzbereich', ''],
+    sections: [
+      ['Kleines Blutbild', [
+        ['Hämoglobin', '13,8', 'g/dl', '13,5 - 17,5', ''],
+        ['Leukozyten', '11,6', '/nl', '3,9 - 10,2', '+'],
+      ]],
+      ['Klinische Chemie', [
+        ['CRP', '24,5', 'mg/l', '< 5,0', '+'],
+        ['Glukose', '5,4', 'mmol/l', '3,9 - 5,6', ''],
+        ['Kreatinin', '102', 'µmol/l', '59 - 104', ''],
+        ['GFR (CKD-EPI)', '71', 'ml/min', '> 90', '-'],
+        ['Cholesterin gesamt', '6,2', 'mmol/l', '< 5,2', '+'],
+        ['LDL-Cholesterin', '4,1', 'mmol/l', '< 3,0', '+'],
+        ['GPT (ALT)', '41', 'U/l', '< 50', ''],
+        ['Kalium', '4,3', 'mmol/l', '3,5 - 5,1', ''],
+      ]],
+      ['Schilddrüse', [
+        ['TSH basal', '5,8', 'mU/l', '0,27 - 4,20', '+'],
+      ]],
+    ],
+    footer: 'Fiktives Musterdokument. Kein echter Patient.',
+  },
+  {
+    id: 'en-lab',
+    lang: 'en',
+    kind: 'lab',
+    lab: 'Sample Diagnostics of Ohio',
+    title: 'Laboratory Report',
+    patient: [['Patient', 'Jane Sample'], ['DOB', '07/22/1975'], ['Collected', '11/04/2026 07:45'], ['Accession', 'FICTIONAL-5520913']],
+    head: ['Test', 'Result', 'Units', 'Reference Range', 'Flag'],
+    sections: [
+      ['COMPREHENSIVE METABOLIC PANEL', [
+        ['Glucose', '92', 'mg/dL', '65 - 99', ''],
+        ['Urea Nitrogen (BUN)', '14', 'mg/dL', '7 - 25', ''],
+        ['Creatinine', '1.31', 'mg/dL', '0.70 - 1.25', 'H'],
+        ['eGFR', '58', 'mL/min/1.73m2', '> OR = 60', 'L'],
+        ['Sodium', '139', 'mmol/L', '135 - 146', ''],
+        ['Potassium', '5.4', 'mmol/L', '3.5 - 5.3', 'H'],
+        ['Calcium', '9.6', 'mg/dL', '8.6 - 10.3', ''],
+        ['ALT', '61', 'U/L', '9 - 46', 'H'],
+        ['AST', '38', 'U/L', '10 - 40', ''],
+      ]],
+      ['LIPID PANEL', [
+        ['Cholesterol, Total', '187', 'mg/dL', '< 200', ''],
+        ['Triglycerides', '210', 'mg/dL', '< 150', 'H'],
+      ]],
+      ['VITAMINS', [
+        ['Vitamin D, 25-OH, Total', '18', 'ng/mL', '30 - 100', 'L'],
+      ]],
+    ],
+    footer: 'Fictional sample document. Not a real patient.',
+  },
+  {
+    id: 'es-lab',
+    lang: 'es',
+    kind: 'lab',
+    lab: 'Laboratorio Clínico Ejemplo',
+    title: 'Informe de Resultados',
+    patient: [['Paciente', 'Ana Ejemplo Ruiz'], ['F. Nacimiento', '30/01/1993'], ['F. Extracción', '06/11/2026'], ['N.º Petición', 'FICTICIO-20931']],
+    head: ['Determinación', 'Resultado', 'Unidades', 'Valores de referencia', ''],
+    sections: [
+      ['HEMATOLOGÍA', [
+        ['Hemoglobina', '14,1', 'g/dL', '12,0 - 15,5', ''],
+        ['Hematíes', '4,62', '10^6/µL', '3,80 - 5,10', ''],
+        ['Leucocitos', '3,2', '10^3/µL', '4,0 - 11,0', '*'],
+        ['Plaquetas', '128', '10^3/µL', '150 - 450', '*'],
+        ['VSG (1ª hora)', '34', 'mm/h', '0 - 20', '*'],
+      ]],
+      ['BIOQUÍMICA', [
+        ['Glucosa', '88', 'mg/dL', '70 - 110', ''],
+        ['Ácido úrico', '7,9', 'mg/dL', '2,4 - 5,7', '*'],
+        ['Ferritina', '210', 'ng/mL', '15 - 150', '*'],
+      ]],
+    ],
+    footer: 'Documento de ejemplo ficticio. No corresponde a un paciente real.',
+  },
+  {
+    id: 'ja-lab',
+    lang: 'ja',
+    kind: 'lab',
+    lab: '見本クリニック 検査部',
+    title: '血液検査結果報告書',
+    patient: [['氏名', '見本 花子'], ['生年月日', '1984年6月9日'], ['採取日', '2026年11月2日'], ['受付番号', '架空-30771']],
+    head: ['検査項目', '結果', '単位', '基準値', ''],
+    sections: [
+      ['血液一般', [
+        ['白血球数 (WBC)', '5200', '/µL', '3300 - 8600', ''],
+        ['ヘモグロビン (Hb)', '10.8', 'g/dL', '11.6 - 14.8', 'L'],
+        ['血小板数 (PLT)', '24.5', '万/µL', '15.8 - 34.8', ''],
+      ]],
+      ['生化学', [
+        ['AST (GOT)', '28', 'U/L', '13 - 30', ''],
+        ['ALT (GPT)', '45', 'U/L', '7 - 23', 'H'],
+        ['γ-GTP', '62', 'U/L', '9 - 32', 'H'],
+        ['空腹時血糖', '112', 'mg/dL', '73 - 109', 'H'],
+        ['HbA1c (NGSP)', '6.1', '%', '4.9 - 6.0', 'H'],
+        ['LDLコレステロール', '148', 'mg/dL', '65 - 163', ''],
+        ['尿酸', '5.1', 'mg/dL', '2.6 - 5.5', ''],
+      ]],
+    ],
+    footer: '架空の見本文書です。実在の患者のものではありません。',
+  },
+  {
+    id: 'de-letter',
+    lang: 'de',
+    kind: 'letter',
+    lab: 'Musterklinik am Stadtpark · Innere Medizin',
+    title: 'Vorläufiger Entlassungsbrief',
+    patient: [['Patient', 'Max Mustermann'], ['Geb.-Datum', '02.09.1961'], ['Aufenthalt', '01.11.2026 - 05.11.2026'], ['Fall-Nr.', 'FIKTIV-0091']],
+    paragraphs: [
+      ['Diagnosen', 'Ambulant erworbene Pneumonie rechts basal. Arterielle Hypertonie. Hypercholesterinämie.'],
+      ['Verlauf', 'Die stationäre Aufnahme erfolgte bei Fieber bis 39,1 °C und produktivem Husten. Im Röntgen-Thorax zeigte sich ein Infiltrat im rechten Unterlappen. Unter antibiotischer Therapie mit Amoxicillin/Clavulansäure kam es zu einer raschen Besserung; das CRP fiel von 142 mg/l auf 24,5 mg/l.'],
+      ['Medikation bei Entlassung', 'Amoxicillin/Clavulansäure 875/125 mg 1-0-1 bis einschließlich 10.11.2026. Ramipril 5 mg 1-0-0. Atorvastatin 20 mg 0-0-1.'],
+      ['Procedere', 'Röntgen-Kontrolle des Thorax in 6 Wochen beim Hausarzt. Wiedervorstellung bei erneutem Fieber oder Atemnot.'],
+    ],
+    facts: ['Pneumonie', 'Hypertonie', 'Hypercholesterinämie', 'Amoxicillin/Clavulansäure', '875/125 mg', '10.11.2026', 'Ramipril', '5 mg', 'Atorvastatin', '20 mg', '6 Wochen', '39,1', '142', '24,5'],
+    footer: 'Fiktives Musterdokument. Kein echter Patient.',
+  },
+  {
+    id: 'tr-letter',
+    lang: 'tr',
+    kind: 'letter',
+    lab: 'Örnek Şehir Hastanesi · Genel Cerrahi',
+    title: 'Epikriz Raporu',
+    patient: [['Hasta', 'Deniz Örnek'], ['Doğum Tarihi', '14.03.1988'], ['Yatış - Çıkış', '27.10.2026 - 29.10.2026'], ['Dosya No', 'KURGU-5512']],
+    paragraphs: [
+      ['Tanı', 'Akut apandisit. Laparoskopik apendektomi uygulandı.'],
+      ['Öykü ve Seyir', 'Hasta 24 saattir süren sağ alt kadran ağrısı ve bulantı şikâyetiyle acil servise başvurdu. Lökosit 14,8 10^3/µL, CRP 86 mg/L saptandı. Ultrasonografide apendiks çapı 11 mm ölçüldü. 27.10.2026 tarihinde genel anestezi altında ameliyat edildi. Ameliyat sonrası komplikasyon gelişmedi.'],
+      ['Taburculuk İlaçları', 'Parasetamol 500 mg tablet, günde 3 kez, 5 gün. Sefuroksim aksetil 500 mg tablet, günde 2 kez, 5 gün.'],
+      ['Öneriler', '10 gün sonra dikiş kontrolü için poliklinik başvurusu. 4 hafta ağır kaldırmaktan kaçınılması. Ateş, artan ağrı ya da yara yerinde akıntı olursa acil başvuru.'],
+    ],
+    facts: ['apandisit', 'apendektomi', '14,8', '86', '11 mm', '27.10.2026', 'Parasetamol', '500 mg', 'Sefuroksim', '10 gün', '4 hafta'],
+    footer: 'Kurgu örnek belge. Gerçek bir hastaya ait değildir.',
+  },
+];

@@ -1,0 +1,19 @@
+{
+  "name": "cachet-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/geologica": "^5.2.0",
+    "@fontsource-variable/jetbrains-mono": "^5.2.0",
+    "@fontsource-variable/schibsted-grotesk": "^5.2.0",
+    "@nearai/inference-sdk": "^0.1.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

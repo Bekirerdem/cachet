@@ -1,0 +1,21 @@
+{
+  "name": "cachet-tools",
+  "private": true,
+  "type": "module",
+  "description": "Measurement and deployment scripts. Scripts that call the model need NEARAI_API_KEY in ../.env.",
+  "scripts": {
+    "verify-tee": "node verify-tee.mjs",
+    "eval": "node --env-file=../.env eval.mjs",
+    "plan": "node --env-file=../.env plan.mjs",
+    "explain": "node --env-file=../.env explain.mjs",
+    "read-real": "node --env-file=../.env read-real.mjs",
+    "via-relay": "node via-relay.mjs",
+    "record-cost": "node --env-file=../.env record-cost.mjs",
+    "deploy-contract": "node deploy-contract.mjs",
+    "add-receipt-key": "node add-receipt-key.mjs"
+  },
+  "dependencies": {
+    "@nearai/inference-sdk": "^0.1.0",
+    "near-api-js": "^7.5.3"
+  }
+}

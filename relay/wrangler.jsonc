@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cachet",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  // The app's built files (cd ../web && npm run build). A request that matches a file is
+  // answered with it; everything else reaches the relay code.
+  "assets": { "directory": "../web/dist" },
+  // Secrets: NEARAI_API_KEY and NEAR_RECEIPT_KEY (`wrangler secret put <NAME>`; locally in .dev.vars).
+  // NEAR_RECEIPT_KEY is a function-call key that can only call `record` on the receipts
+  // contract (made by tools/add-receipt-key.mjs). Testnet only.
+  "vars": {
+    "NEAR_RPC": "https://test.rpc.fastnear.com",
+    "NEAR_ACCOUNT_ID": "bekir16-dev.testnet",
+    "RECEIPT_CONTRACT": "receipts.bekir16-dev.testnet",
+    "DAILY_CHAT_LIMIT": "800",
+    "ENCLAVE_SIGNERS": "89154a43a47684742c3d1753252bb6f49f61da9d8c84fc9b1def2df130cb2d93,5a0210f2442c79355784f9de021985429561da5bacc3a4424b01ac52b7e0caff"
+  },
+  // Counts the day's model calls so a public demo cannot overrun its credit (see DAILY_CHAT_LIMIT).
+  "kv_namespaces": [{ "binding": "BUDGET", "id": "c9478e6e57d04342b727adb3c658ada5" }],
+  // Limits are per network address, per Cloudflare location.
+  "ratelimits": [
+    { "name": "CHAT_LIMIT", "namespace_id": "4101", "simple": { "limit": 30, "period": 60 } },
+    { "name": "LOOKUP_LIMIT", "namespace_id": "4102", "simple": { "limit": 90, "period": 60 } },
+    { "name": "RECEIPT_LIMIT", "namespace_id": "4103", "simple": { "limit": 30, "period": 60 } }
+  ]
+}
