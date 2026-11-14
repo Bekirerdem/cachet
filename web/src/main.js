@@ -1,5 +1,6 @@
-// The app: one phone column, five steps. The model copies; the checks in ../core decide what
-// may be shown; the person confirms every line before it enters the plan. Papers are kept
+// The app: five steps. On a phone it is one column; on a wide screen the paper lies on the left
+// and the words about it stand on the right. The model copies; the checks in ../core decide
+// what may be shown; no line enters the plan unless the person confirms it. Papers are kept
 // on this device only.
 import './style.css';
 import lensUrl from './assets/glass-lens.jpg?url';
@@ -8,7 +9,7 @@ import letterUrl from '../../samples/out/de-letter.photo.png?url';
 import labUrl from '../../samples/out/tr-lab.photo.png?url';
 import { isVerificationError } from '@nearai/inference-sdk';
 import { APP_NAME, LANGUAGE_NAMES, PLAN, RTL, STRINGS, pickLanguage } from './i18n.js';
-import { prepareImage, seal } from './image.js';
+import { prepareImage, preparePdf, seal } from './image.js';
 import { LANGUAGES, createEngine, isEmpty, isLab, recordReceipt } from './engine.js';
 import { compareLines, compareRows, differingPart } from '../../core/compare.mjs';
 import { openPoints, readSlots } from '../../core/plan.mjs';
@@ -28,7 +29,7 @@ const state = {
   planLang: localStorage.getItem('planLang'),
   screen: 'start', step: 1, over: null, note: null,
   shots: [], shot: 0, photos: [],
-  paper: null, active: 0, editing: false, shownPage: -1,
+  paper: null, active: 0, editing: false, shownPage: -1, list: true, settling: false, trayPhoto: false,
   checks: {}, reading: 0, engine: null, synced: 0, error: null,
 };
 // Opened with ?test, the page exposes its state so a scripted browser can follow a run.
@@ -47,6 +48,9 @@ const size = (bytes) => (bytes >= 1e6 ? `${(bytes / 1e6).toLocaleString(state.la
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const secondsSince = (start) => Number(((performance.now() - start) / 1000).toFixed(1));
+// A wide screen gets its own layout: the paper on the left, the words on the right.
+const wideScreen = matchMedia('(min-width: 1000px)');
+const wide = () => wideScreen.matches;
 
 /* ---------- papers kept on this device ---------- */
 
@@ -77,18 +81,23 @@ function render() {
   state.step = STEP[state.screen] ?? state.step;
   app.innerHTML = `
     <header class="head">
-      <div class="steps">${[1, 2, 3, 4, 5].map((n) => `<i class="${n <= state.step ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="steps">${[1, 2, 3, 4, 5].map((n) => `<i class="${n <= state.step ? 'on' : ''} ${n === state.step ? 'now' : ''}"><span>${t(`step_${n}`)}</span></i>`).join('')}</div>
       <div class="headrow">
-        ${screen.back ? `<button class="textbtn" data-act="${screen.back[0]}">${t(screen.back[1])}</button>` : `<span class="wordmark">${APP_NAME}</span>`}
+        <div class="headleft"><span class="wordmark ${screen.back ? 'withback' : ''}">${APP_NAME}</span>${screen.back ? `<button class="textbtn" data-act="${screen.back[0]}">${t(screen.back[1])}</button>` : ''}</div>
         <div class="lang">${Object.keys(STRINGS).map((l) => `<button data-lang="${l}" class="${l === state.lang ? 'on' : ''}" aria-pressed="${l === state.lang}">${l.toUpperCase()}</button>`).join('')}</div>
       </div>
     </header>
+    <section class="tray" id="tray"></section>
     <main class="view" id="view">${screen.view}</main>
     <footer class="dock" id="dock">${screen.dock ?? ''}</footer>
     ${state.over ? overlay() : ''}`;
   document.documentElement.lang = state.lang;
-  // Beside the phone column on a wide screen: what this is, in a few plain words.
-  document.getElementById('side').innerHTML = `<h2>${t('side_h')}</h2><p>${t('side_p')}</p><ul>${[1, 2, 3].map((n) => `<li><b>${t(`side_${n}`)}</b>${t(`side_${n}t`)}</li>`).join('')}</ul>`;
+  // The paper side of a screen. In one column it stays where the screen put it; on a wide
+  // screen it moves to the tray on the left and the words keep the right.
+  const paperSide = app.querySelector('#view .pa');
+  if (wide() && paperSide) document.getElementById('tray').append(paperSide);
+  app.classList.toggle('flat', !paperSide);
+  app.classList.toggle('listing', state.screen === 'compare' && state.list);
   screen.after?.();
 }
 
@@ -108,17 +117,21 @@ function startScreen() {
         ${papers.map((paper) => `<div class="rowp"><button class="rowbtn" data-act="open" data-id="${paper.id}"><b>${t(paperKind(paper))}</b><small>${date(paper.at)}${paper.pages.length > 1 ? ` · ${t('pages_n', { n: paper.pages.length })}` : ''}${paper.title ? ` · ${esc(paper.title)}` : ''}</small></button><button class="more" data-act="delete-one" data-id="${paper.id}">${t('delete_one')}</button></div>`).join('')}
         <div class="rowp"><button class="more" data-act="delete-all">${t('delete_all')}</button></div></div>`
     : '';
+  const big = wide();
+  // On a wide screen three facts stand under the opening lines, and a file is chosen, dropped or pasted.
+  const facts = big ? `<ul class="facts">${[1, 2, 3].map((n) => `<li><b>${t(`side_${n}`)}</b>${t(`side_${n}t`)}</li>`).join('')}</ul>` : '';
   return {
     view: `
       <h1 class="land">${t('start_h')}</h1>
-      <p class="lead land">${t('start_p')}</p>
+      <p class="lead land">${t(big ? 'start_p_web' : 'start_p')}</p>
+      ${facts}
       <button class="more" data-act="how">${t('how')}</button>
       ${library}
-      <div class="obj ${papers.length ? 'mid' : ''}" style="background-image:url(${lensUrl})"></div>`,
+      <div class="pa"><div class="obj ${papers.length && !big ? 'mid' : ''}" style="background-image:url(${lensUrl})"></div>${big ? `<p class="drophint"><span>${t('drop_here')}</span><b>${t('drop_now')}</b></p>` : ''}</div>`,
     dock: `
-      <label class="btn">${t('take')}<input type="file" accept="image/*" capture="environment" data-file></label>
+      ${big ? `<label class="btn">${t('choose_web')}<input type="file" accept="image/*,application/pdf" multiple data-file></label>` : `<label class="btn">${t('take')}<input type="file" accept="image/*" capture="environment" data-file></label>`}
       <div class="links">
-        <label class="link">${t('choose')}<input type="file" accept="image/*" multiple data-file></label>
+        ${big ? '' : `<label class="link">${t('choose')}<input type="file" accept="image/*,application/pdf" multiple data-file></label>`}
         <button class="link" data-act="sample-letter">${t('sample_letter')}</button>
         <button class="link" data-act="sample-lab">${t('sample_lab')}</button>
       </div>
@@ -130,11 +143,22 @@ function startScreen() {
 
 async function addShots(files) {
   state.note = null;
-  for (const file of [...files].slice(0, MAX_PAGES - state.shots.length)) {
-    const { canvas, preview } = await prepareImage(file);
-    state.shots.push({ canvas, preview, boxes: [] });
+  for (const file of files) {
+    const room = MAX_PAGES - state.shots.length;
+    if (room <= 0) break;
+    try {
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name ?? '');
+      const pages = isPdf ? await preparePdf(file, room) : [await prepareImage(file)];
+      for (const { canvas, preview } of pages) state.shots.push({ canvas, preview, boxes: [] });
+    } catch (error) {
+      console.error(error);
+      state.note = t('bad_file');
+    }
   }
-  if (state.shots.length === 0) return;
+  if (state.shots.length === 0) {
+    if (state.note && state.screen === 'start') render();
+    return;
+  }
   state.shot = state.shots.length - 1;
   if (state.screen === 'prepare') render();
   else go('prepare');
@@ -149,10 +173,10 @@ function prepareScreen() {
     view: `
       <h1 class="small land">${t('hide_h')}</h1>
       <p class="lead land" style="max-width:none">${t('hide_p')}</p>
-      <div class="pagebar">
+      <div class="pa"><div class="pagebar">
         <span class="lbl">${t('page_of', { n: state.shot + 1, total })}</span>
         <div class="chips">${total > 1 ? state.shots.map((_, i) => `<button class="pagechip ${i === state.shot ? 'on' : ''}" data-act="shot" data-i="${i}" aria-label="${t('page_of', { n: i + 1, total })}">${i + 1}</button>`).join('') : ''}</div>
-        ${total < MAX_PAGES ? `<label class="more">${t('add_page')}<input type="file" accept="image/*" multiple data-file></label>` : ''}
+        ${total < MAX_PAGES ? `<label class="more">${t('add_page')}<input type="file" accept="image/*,application/pdf" multiple data-file></label>` : ''}
       </div>
       <div class="stagewrap"><div class="stage" id="stage"><img src="${shot.preview}" alt="" draggable="false">${boxesHtml(shot)}</div></div>
       <div class="links left">
@@ -160,7 +184,7 @@ function prepareScreen() {
         ${shot.boxes.length ? `<button class="link" data-act="clear-boxes">${t('clear_boxes')}</button>` : ''}
         ${total > 1 ? `<button class="link" data-act="remove-shot">${t('remove_page')}</button>` : ''}
       </div>
-      <p class="foot" id="boxnote">${shot.boxes.length ? `${t('hidden_n', { n: shot.boxes.length })}. ${t('box_hint')}` : ''}</p>
+      <p class="foot" id="boxnote">${shot.boxes.length ? `${t('hidden_n', { n: shot.boxes.length })}. ${t('box_hint')}` : ''}</p></div>
       <label class="pick"><span class="lbl">${t('plan_lang')}</span>
         <select data-planlang>${Object.keys(LANGUAGES).map((l) => `<option value="${l}" ${l === planLang ? 'selected' : ''}>${LANGUAGE_NAMES[l]}</option>`).join('')}</select></label>`,
     dock: `<button class="btn" data-act="send">${total > 1 ? t('send_many', { n: total }) : t('send_one')}</button><p class="foot c" style="margin-top:10px">${t('not_sent')}</p>`,
@@ -259,7 +283,7 @@ function sendingScreen() {
   return {
     view: `
       <h1 class="land">${t('send_h')}</h1>
-      ${slab(true)}
+      <div class="pa">${slab(true)}</div>
       ${total > 1 ? `<span class="lbl" id="pageinfo" style="text-align:center;margin-bottom:6px">${t('page_of', { n: state.reading + 1, total })}</span>` : ''}
       <div id="checks">${CHECKS.map(checkPlate).join('')}</div>`,
   };
@@ -312,7 +336,7 @@ async function send() {
 async function begin() {
   // readers: how many pages two models read, on how many the second did not answer, and on how many lines they parted.
   const paper = { id: Date.now().toString(36), at: Date.now(), planLang: state.planLang, pages: [], entries: [], plain: null, explanation: null, placements: [], exchanges: [], records: [], timings: {}, title: '', hidden: state.hidden, readers: { pages: 0, alone: 0, apart: 0 } };
-  Object.assign(state, { paper, checks: { hw: { status: 'running', detail: t('c_hw_run') } }, reading: 0, active: 0, editing: false, shownPage: -1, synced: 0, error: null, note: null });
+  Object.assign(state, { paper, checks: { hw: { status: 'running', detail: t('c_hw_run') } }, reading: 0, active: 0, editing: false, shownPage: -1, list: true, settling: false, trayPhoto: false, synced: 0, error: null, note: null });
   go('sending');
   const started = performance.now();
   try {
@@ -369,6 +393,14 @@ async function begin() {
       if (!page.skipped) {
         setCheck('read', 'done', t('c_read_done'));
         const other = await second;
+        // The first reader was unsure what the page is and the second says it is not a medical paper: it is not read further.
+        if (other?.page.document_kind === 'not_a_medical_document' && page.document_kind === 'other') {
+          Object.assign(page, { skipped: true, document_kind: 'not_a_medical_document' });
+          mine.length = 0;
+        }
+      }
+      if (!page.skipped) {
+        const other = await second;
         paper.readers.pages += 1;
         if (!other) {
           paper.readers.alone += 1;
@@ -421,6 +453,20 @@ function unreadablePlate() {
   return `<div class="plate warn"><span class="lbl">${t('unreadable')}</span><div class="item">${t('unreadable_t')}</div><details><summary><span class="more">${t('unreadable_more', { n: parts.length })}</span></summary>${parts.map((u) => `<div class="item sm" dir="auto">${esc(u)}</div>`).join('')}</details></div>`;
 }
 
+/**
+ * The paper as it was copied, behind frost; the lens clears one line. On a wide screen it lies
+ * in the tray, and the person's own photo is one switch away.
+ */
+function paperPanel() {
+  const canSwitch = wide() && state.photos.length > 0;
+  const photo = canSwitch && state.trayPhoto;
+  const tabs = canSwitch ? `<div class="seg"><button data-act="tray-text" class="${photo ? '' : 'on'}" aria-pressed="${!photo}">${t('tab_text')}</button><button data-act="tray-photo" class="${photo ? 'on' : ''}" aria-pressed="${photo}">${t('tab_photo')}</button></div>` : '';
+  const body = photo
+    ? `<div class="photoview">${state.photos.map((url) => `<img src="${url}" alt="">`).join('')}</div>`
+    : '<div class="paper" id="paper"><div class="sheet" id="sheet"><pre class="blur" id="blur"></pre><pre class="sharp" id="sharp"></pre><div class="lens" id="lens"></div></div></div>';
+  return `<div class="pa">${tabs}${body}</div>`;
+}
+
 function compareScreen() {
   state.shownPage = -1;
   return {
@@ -428,19 +474,58 @@ function compareScreen() {
     view: `
       <h1 class="small land">${t('cmp_h')}</h1>
       ${unreadablePlate()}
-      <div class="paper" id="paper"><div class="sheet" id="sheet"><pre class="blur" id="blur"></pre><pre class="sharp" id="sharp"></pre><div class="lens" id="lens"></div></div></div>
-      ${state.photos.length ? `<button class="more" data-act="photo">${t('photo')}</button>` : ''}
+      ${paperPanel()}
+      ${state.photos.length && !wide() ? `<button class="more" data-act="photo">${t('photo')}</button>` : ''}
       <div id="entry"></div>`,
     dock: '<div id="cmpdock"></div>',
     after: () => paintCompare(false),
   };
 }
 
-function entryPlate(entry) {
-  if (!entry) {
-    const ok = kept().length;
-    return `<div class="plate clear arr"><div class="item">${ok ? t('cmp_done', { ok, left: entries().length - ok }) : t('cmp_nothing')}</div></div>`;
+/* All lines at once. What two readers copied the same on a page both could read is confirmed
+   together, with one tap. Every other line is settled one by one, under the lens. */
+const pageHard = (n) => (state.paper.pages[n]?.unreadable ?? []).length > 0;
+const needsEye = (entry) => twoStatus(entry) !== 'agree' || (entry.kind === 'row' ? entry.data.readable === false : pageHard(entry.page));
+const waiting = () => entries().filter((e) => e.status === 'pending');
+
+function lineHtml(entry, i) {
+  const word = { same: 'same_w', corrected: 'by_you', left: 'left_w' }[entry.status] ?? (needsEye(entry) ? 'look_w' : '');
+  const chip = word ? `<span class="chip ${entry.status === 'left' ? 'wait' : ''}">${t(word)}</span>` : '';
+  if (entry.kind === 'row') {
+    const d = entry.data;
+    const under = [d.range, d.flag].filter((part) => String(part ?? '').trim() !== '').join(' · ');
+    return `<button class="line ${entry.status}" data-act="line" data-e="${i}"><span class="quote" dir="auto">${esc(d.name)}${under ? `<i dir="ltr">${esc(under)}</i>` : ''}</span><span class="val" dir="ltr">${esc(d.value)} ${esc(d.unit)}</span>${chip}</button>`;
   }
+  return `<button class="line ${entry.status}" data-act="line" data-e="${i}"><span class="quote" dir="auto">${esc(entry.paper)}<i>${t(`k_${entry.kind}`)}</i></span>${chip}</button>`;
+}
+
+function listPlate() {
+  const all = entries();
+  const pending = waiting();
+  const eye = pending.filter(needsEye).length;
+  const ok = kept().length;
+  const intro = eye ? t('list_eye', { n: eye }) : pending.length ? t('list_two', { n: pending.length }) : ok ? t('cmp_done', { ok, left: all.length - ok }) : t('cmp_nothing');
+  let page = -1;
+  const rows = all
+    .map((entry, i) => {
+      const head = manyPages() && entry.page !== page ? `<span class="lbl">${t('page_of', { n: entry.page + 1, total: state.paper.pages.length })}</span>` : '';
+      page = entry.page;
+      return head + lineHtml(entry, i);
+    })
+    .join('');
+  return `<div class="plate ${eye ? 'warn' : pending.length ? '' : 'clear'} arr"><div class="item">${intro}</div></div><div class="plate lines arr" style="--i:1">${rows}</div>`;
+}
+
+function listDock() {
+  const pending = waiting();
+  const eye = pending.filter(needsEye).length;
+  const count = `<p class="foot c" style="margin-top:8px">${t('list_hint')}</p>`;
+  if (eye) return `<button class="btn" data-act="settle">${t('settle', { n: eye })}</button>${count}`;
+  if (pending.length) return `<button class="btn" data-act="all-finish">${t('all_match', { n: pending.length })}</button>${count}`;
+  return `<button class="btn" data-act="finish" ${kept().length ? '' : 'disabled'}>${t('make')}</button>${count}`;
+}
+
+function entryPlate(entry) {
   const fields = FIELDS[entry.kind];
   const where = manyPages() ? ` · ${t('page_tag', { n: entry.page + 1 })}` : '';
   if (apart(entry) && entry.status === 'pending' && !state.editing) return apartPlate(entry, where);
@@ -460,7 +545,6 @@ function entryPlate(entry) {
    both readings are shown and the person says which one the paper has. */
 const twoStatus = (entry) => entry.two?.status ?? 'unknown'; // papers saved before there were two readers
 const apart = (entry) => ['differ', 'missing', 'only2'].includes(twoStatus(entry));
-const agreed = (entry) => !apart(entry);
 const readersNote = (entry) => {
   const key = { agree: 'two_same', single: 'two_single' }[twoStatus(entry)];
   return key && entry.status === 'pending' && !state.editing ? `<small class="readers ${key === 'two_same' ? 'ok' : ''}">${t(key)}</small>` : '';
@@ -503,11 +587,8 @@ function apartPlate(entry, where) {
 
 function compareDock(entry) {
   const count = `<p class="foot c" style="margin-top:8px">${t('cmp_progress', { n: decided(), total: entries().length })}</p>`;
-  if (!entry) {
-    return `<button class="btn" data-act="finish" ${kept().length ? '' : 'disabled'}>${t('make')}</button><div class="links"><button class="link" data-act="prev">${t('prev')}</button></div>`;
-  }
   if (state.editing) return `<div class="pair"><button class="btn" data-act="save">${t('save')}</button><button class="btn ghost" data-act="cancel">${t('cancel')}</button></div>${count}`;
-  const back = state.active > 0 ? `<button class="link" data-act="prev">${t('prev')}</button>` : '';
+  const back = `<button class="link" data-act="to-list">${t('all_lines')}</button>`;
   if (apart(entry) && entry.status === 'pending') {
     const status = twoStatus(entry);
     const hasOther = status === 'differ' && (entry.kind === 'row' || Boolean(entry.two.other?.line));
@@ -519,9 +600,8 @@ function compareDock(entry) {
     return `<div class="pair">${buttons}</div>
       <div class="links">${hasOther || status === 'only2' ? `<button class="link" data-act="edit">${t('correct')}</button>` : ''}${status === 'only2' ? '' : `<button class="link" data-act="leave">${t('leave')}</button>`}${back}</div>${count}`;
   }
-  const rowsLeft = entries().some((e) => e.status === 'pending' && e.kind === 'row' && agreed(e) && e !== entry);
   return `<div class="pair"><button class="btn" data-act="same">${t('same')}</button><button class="btn ghost" data-act="edit">${t('correct')}</button></div>
-    <div class="links"><button class="link" data-act="leave">${t('leave')}</button>${back}${entry.kind === 'row' && rowsLeft ? `<button class="link" data-act="all-same">${t('all_same')}</button>` : ''}</div>${count}`;
+    <div class="links"><button class="link" data-act="leave">${t('leave')}</button>${back}</div>${count}`;
 }
 
 /** The person says which of two readings the paper has. */
@@ -552,18 +632,22 @@ function pick(which) {
 }
 
 async function paintCompare(swap = true) {
-  const entry = entries()[state.active];
   const box = document.getElementById('entry');
   if (!box) return;
   if (swap && box.firstElementChild && !reduced) {
-    box.firstElementChild.classList.remove('arr');
-    box.firstElementChild.classList.add('out');
+    for (const el of box.children) {
+      el.classList.remove('arr');
+      el.classList.add('out');
+    }
     await pause(200);
   }
-  box.innerHTML = entryPlate(entry);
-  document.getElementById('cmpdock').innerHTML = compareDock(entry);
+  const entry = state.list ? null : entries()[state.active] ?? null;
+  app.classList.toggle('listing', !entry);
+  box.innerHTML = entry ? entryPlate(entry) : listPlate();
+  document.getElementById('cmpdock').innerHTML = entry ? compareDock(entry) : listDock();
   moveLens(entry);
-  if (state.editing) box.querySelector('input')?.focus();
+  if (!entry) document.getElementById('view').scrollTo({ top: 0 });
+  else if (state.editing) box.querySelector('input')?.focus();
   // Two readings side by side are tall: bring them into view instead of leaving them under the dock.
   else if (entry && apart(entry) && entry.status === 'pending') {
     const view = document.getElementById('view');
@@ -613,8 +697,10 @@ function decide(status) {
   if (!entry) return;
   entry.status = status;
   state.editing = false;
-  const next = entries().findIndex((e, i) => i > state.active && e.status === 'pending');
-  state.active = next === -1 ? entries().length : next;
+  // Going through the lines that need a closer look, the next one follows; otherwise back to all lines.
+  const next = state.settling ? entries().findIndex((e) => e.status === 'pending' && needsEye(e)) : -1;
+  if (next === -1) Object.assign(state, { list: true, settling: false });
+  else state.active = next;
   paintCompare();
 }
 
@@ -640,7 +726,7 @@ function workingScreen() {
   return {
     view: `
       <h1 class="land">${t('work_h')}</h1>
-      ${slab()}
+      <div class="pa">${slab()}</div>
       ${rows.map((key, i) => `<div class="plate arr" id="${key}" style="--i:${i}"><div class="rowp"><b>${t(key)}</b><span class="chip running">${t('running')}</span></div></div>`).join('')}
       <p class="foot" style="margin-top:14px">${t('w_check')}</p>`,
   };
@@ -729,7 +815,7 @@ const tagline = (entry, count = null) => {
   const parts = [count === null ? '' : `× ${esc(count)}`, entry.status === 'corrected' ? t('by_you') : '', manyPages() ? t('page_tag', { n: entry.page + 1 }) : ''].filter(Boolean);
   return parts.length ? `<span class="tagline" dir="ltr">${parts.join(' · ')}</span>` : '';
 };
-const item = (main, sub, entry, inside = '', count = null) => `<details class="item"><summary><div class="rowp">${main}</div>${sub || tagline(entry, count) ? `<small>${tagline(entry, count)}${sub}</small>` : ''}</summary>${inside ? `<small>${inside}</small>` : ''}<div class="from"><span class="lbl">${p('on_paper')}${manyPages() ? ` · ${t('page_tag', { n: entry.page + 1 })}` : ''}</span><span class="quote" dir="auto" style="margin-top:6px">${esc(entry.paper)}</span></div></details>`;
+const item = (main, sub, entry, inside = '', count = null) => `<details class="item" data-e="${state.paper.entries.indexOf(entry)}"><summary><div class="rowp">${main}</div>${sub || tagline(entry, count) ? `<small>${tagline(entry, count)}${sub}</small>` : ''}</summary>${inside ? `<small>${inside}</small>` : ''}<div class="from"><span class="lbl">${p('on_paper')}${manyPages() ? ` · ${t('page_tag', { n: entry.page + 1 })}` : ''}</span><span class="quote" dir="auto" style="margin-top:6px">${esc(entry.paper)}</span></div></details>`;
 const plate = (label, body, i) => (body ? `<div class="plate clear arr" style="--i:${Math.min(i, 8)}"><span class="lbl">${label}</span>${body}</div>` : '');
 const joinParts = (parts) => (state.paper.planLang === 'ja' ? parts.join(p('or')) : parts.length > 1 ? `${parts.slice(0, -1).join(', ')} ${p('or')} ${parts.at(-1)}` : parts[0]);
 
@@ -834,10 +920,14 @@ function planScreen() {
     readersLine(paper),
     t('legend'),
   ].filter(Boolean);
+  const big = wide();
+  state.shownPage = -1;
   return {
     back: ['home', 'home'],
+    after: () => moveLens(null),
     view: `
       <h1 class="land">${t(lines ? 'plan_h' : results ? 'lab_h' : 'paper_h')}</h1>
+      ${big ? paperPanel() : ''}
       ${unreadablePlate()}
       <div class="plan" lang="${paper.planLang}" dir="${RTL.has(paper.planLang) ? 'rtl' : 'ltr'}">
         ${saysPlate(0)}
@@ -849,7 +939,7 @@ function planScreen() {
       <div class="links left" style="margin-top:8px">
         <button class="link" data-act="doctor">${t('doctor')}</button>
         <button class="link" data-act="text">${t('copied')}</button>
-        ${state.photos.length ? `<button class="link" data-act="photo">${t('photo')}</button>` : ''}
+        ${state.photos.length && !big ? `<button class="link" data-act="photo">${t('photo')}</button>` : ''}
       </div>
       <label class="pick"><span class="lbl">${t('rewrite')}</span>
         <select data-rewrite>${Object.keys(LANGUAGES).map((l) => `<option value="${l}" ${l === paper.planLang ? 'selected' : ''}>${LANGUAGE_NAMES[l]}</option>`).join('')}</select></label>`,
@@ -963,17 +1053,19 @@ function proofScreen() {
         <div class="rowp"><span><b>${t('pr_model')}</b><code>${esc(x.receipt.model)}</code></span><span class="chip">${t('verified')}</span></div>
         <div class="rowp"><span><b>${t('pr_key')}</b><code>${short(x.receipt.signer)}</code></span></div>
       </div>`;
+  const big = wide();
+  const limits = `<div class="two"><div class="plate arr" style="--i:3"><b>${t('protects')}</b>${t('protects_t')}</div><div class="plate arr" style="--i:4"><b>${t('not_protects')}</b>${t('not_protects_t')}</div></div>`;
   return {
     back: ['plan', 'back'],
     view: `
       <h1 class="land">${t('proof_h')}</h1>
-      <div class="obj small" style="background-image:url(${frostUrl})"></div>
+      <div class="pa"><div class="obj small" style="background-image:url(${frostUrl})"></div>${big ? limits : ''}</div>
       ${models.map(modelPlate).join('')}
       <div class="plate clear arr" style="--i:1"><span class="lbl">${t('pr_answers')}</span>
         ${exchanges.map((x) => `<div class="rowp"><span><b>${stepName(x)}</b><code>${short(x.receipt.response_hash)}${x.wire ? ` · ${t('sent_as', { size: size(x.wire.bytes) })}` : ''}</code></span><span class="chip">${t('signed')}</span></div>`).join('')}
       </div>
       <div class="plate clear arr" style="--i:2"><span class="lbl">${t('pr_chain')}</span><div id="chain">${chainRows()}</div></div>
-      <div class="two"><div class="plate arr" style="--i:3"><b>${t('protects')}</b>${t('protects_t')}</div><div class="plate arr" style="--i:4"><b>${t('not_protects')}</b>${t('not_protects_t')}</div></div>
+      ${big ? '' : limits}
       <p class="foot" style="margin-top:14px">${state.paper.hidden ? `${t('hidden_total', { n: state.paper.hidden })} ` : ''}${t('stored')}</p>`,
     dock: `<button class="btn" data-act="home">${t('again')}</button><div class="links"><button class="link" data-act="delete">${t('delete')}</button></div>`,
   };
@@ -998,7 +1090,7 @@ async function sample(url, name) {
 }
 
 function home() {
-  Object.assign(state, { shots: [], shot: 0, photos: [], paper: null, engine: null, synced: 0, error: null });
+  Object.assign(state, { shots: [], shot: 0, photos: [], paper: null, engine: null, synced: 0, error: null, list: true, settling: false, trayPhoto: false });
   go('start');
 }
 
@@ -1040,8 +1132,13 @@ const ACTIONS = {
   edit: () => { state.editing = true; paintCompare(); },
   cancel: () => { state.editing = false; paintCompare(); },
   save: saveEdit,
-  prev: () => { state.active = Math.max(0, Math.min(state.active, entries().length) - 1); state.editing = false; paintCompare(); },
-  'all-same': () => { for (const e of entries()) if (e.status === 'pending' && e.kind === 'row' && agreed(e)) e.status = 'same'; const next = entries().findIndex((e) => e.status === 'pending'); state.active = next === -1 ? entries().length : next; paintCompare(); },
+  line: (el) => { Object.assign(state, { list: false, settling: false, editing: false, active: Number(el.dataset.e) }); paintCompare(); },
+  settle: () => { Object.assign(state, { list: false, settling: true, editing: false, active: entries().findIndex((e) => e.status === 'pending' && needsEye(e)) }); paintCompare(); },
+  'to-list': () => { Object.assign(state, { list: true, settling: false, editing: false }); paintCompare(); },
+  // One tap for the lines two readers copied the same; then straight on to the plan.
+  'all-finish': () => { for (const e of waiting()) if (!needsEye(e)) e.status = 'same'; finish(); },
+  'tray-text': () => { state.trayPhoto = false; render(); },
+  'tray-photo': () => { state.trayPhoto = true; render(); },
   finish,
   plan: () => go('plan'),
   proof: () => go('proof'),
@@ -1083,7 +1180,42 @@ app.addEventListener('change', (event) => {
     finish();
   }
 });
-addEventListener('resize', () => { if (state.screen === 'compare') moveLens(entries()[state.active]); });
+addEventListener('resize', () => { if (state.screen === 'compare') moveLens(state.list ? null : entries()[state.active]); });
+wideScreen.addEventListener('change', render);
+
+// With a mouse, pointing at a line brings the lens to it on the paper.
+app.addEventListener('pointerover', (event) => {
+  if (event.pointerType !== 'mouse' || !state.paper) return;
+  const line = event.target.closest('[data-e]');
+  if (line && ((state.screen === 'compare' && state.list) || state.screen === 'plan')) moveLens(state.paper.entries[Number(line.dataset.e)] ?? null);
+});
+
+// A file can also be dropped anywhere on the page, or pasted.
+const takesFiles = () => ['start', 'prepare'].includes(state.screen) && !state.over;
+const usable = (list) => [...(list ?? [])].filter((file) => file.type.startsWith('image/') || file.type === 'application/pdf');
+let dragging = 0;
+addEventListener('dragenter', (event) => {
+  if (!takesFiles() || ![...(event.dataTransfer?.types ?? [])].includes('Files')) return;
+  event.preventDefault();
+  dragging += 1;
+  app.classList.add('dropping');
+});
+addEventListener('dragover', (event) => { if (takesFiles()) event.preventDefault(); });
+addEventListener('dragleave', () => {
+  dragging = Math.max(0, dragging - 1);
+  if (dragging === 0) app.classList.remove('dropping');
+});
+addEventListener('drop', (event) => {
+  event.preventDefault();
+  dragging = 0;
+  app.classList.remove('dropping');
+  const files = usable(event.dataTransfer?.files);
+  if (takesFiles() && files.length) addShots(files);
+});
+addEventListener('paste', (event) => {
+  const files = usable(event.clipboardData?.files);
+  if (takesFiles() && files.length) addShots(files);
+});
 
 addEventListener('online', () => { if (state.screen === 'start') render(); });
 addEventListener('offline', () => { if (state.screen === 'start') render(); });

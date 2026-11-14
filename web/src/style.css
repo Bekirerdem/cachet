@@ -34,7 +34,7 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid var(--rim); outline-offset: 3px; border-radius: 6px; }
 
-/* The phone column. On a wide screen it stays a phone, centred on a darker ground. */
+/* One column, phone first. A tablet keeps the column; a wide screen gets its own layout further down. */
 #app {
   position: relative; height: 100dvh; width: min(100vw, 430px); margin: 0 auto; background: var(--night);
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden;
@@ -189,7 +189,7 @@ details > summary::-webkit-details-marker { display: none; }
 @media print {
   html, body { height: auto; overflow: visible; background: #fff; }
   body { display: block; }
-  #app, .side { display: none; }
+  #app { display: none; }
   #print { display: block; }
   @page { size: A4; margin: 18mm 16mm; }
   #print .doc { color: #000; font-size: 12pt; padding: 0; }
@@ -216,18 +216,106 @@ details > summary::-webkit-details-marker { display: none; }
 .rowp.sm { font-size: 14px; }
 .plate.warn .from + .from { margin-top: 10px; }
 
-/* Wide screens. The app stays a phone; beside it, a few plain words say what it is. */
-.side { display: none; }
+/* All lines at once: the copy as a list. A line opens under the lens when it is tapped. */
+.plate.lines { padding: 6px 8px; }
+.lines .lbl { padding: 10px 8px 4px; }
+.line { display: flex; align-items: baseline; gap: 12px; width: 100%; min-height: 44px; padding: 10px 8px; background: none; border: 0; text-align: start; transition: background 0.2s; }
+.line + .line, .lbl + .line { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.line .quote { flex: 1; min-width: 0; font-size: 12px; }
+.line .quote i { display: block; font-style: normal; font-size: 11px; color: var(--mut); }
+.line .val { font: 500 12.5px/1.5 var(--mono); white-space: nowrap; }
+.line.left .quote, .line.left .val { opacity: 0.45; text-decoration: line-through; }
+
+/* One column: the head shows the way back in place of the wordmark, and the paper side stays in the flow. */
+.headleft { display: flex; align-items: center; }
+.wordmark.withback { display: none; }
+.steps i span { display: none; }
+.tray { display: none; }
+@media (max-width: 999px) {
+  /* The list is the copy; the frosted paper comes back when one line is under the lens. */
+  #app.listing .paper { display: none; }
+}
+
+/* Wide screens: a desk. The paper lies in a tray on the left; the words about it and the one
+   action stand on the right. Nothing here is a phone in a frame. */
 @media (min-width: 1000px) {
-  body { display: grid; grid-template-columns: minmax(0, 340px) 430px; justify-content: center; align-items: center; gap: 84px; }
-  #app { margin: 0; top: 0; }
-  .side { display: block; color: var(--soft); }
-  .side h2 { font: 300 44px/1.04 var(--display); letter-spacing: -0.03em; color: var(--text); text-wrap: balance; }
-  .side h2 b { font-weight: 600; }
-  .side p { font-size: 16px; line-height: 1.5; margin-top: 18px; max-width: 30ch; }
-  .side ul { list-style: none; padding: 0; margin-top: 30px; display: grid; gap: 12px; }
-  .side li { font: 400 12px/1.5 var(--mono); color: var(--mut); padding-top: 12px; box-shadow: inset 0 1px 0 rgba(255, 180, 138, 0.3); }
-  .side li b { display: block; font: 600 15px/1.3 var(--body); color: var(--text); }
+  :root { --gut: 0px; --edge: max(40px, calc((100vw - 1200px) / 2)); }
+  #app { width: 100vw; height: 100dvh; top: 0; margin: 0; border-radius: 0; box-shadow: none; padding: 0 var(--edge) 26px; background: var(--night-deep);
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; column-gap: 60px; }
+
+  .head { grid-column: 1 / -1; padding: 14px 0 0; display: grid; grid-template-columns: 1fr minmax(0, 520px) 1fr; align-items: center; column-gap: 24px; }
+  .headrow { display: contents; }
+  .headleft { grid-column: 1; grid-row: 1; gap: 8px; }
+  .lang { grid-column: 3; grid-row: 1; justify-self: end; }
+  .wordmark, .wordmark.withback { display: inline; font-size: 21px; padding: 0; }
+  .steps { grid-column: 2; grid-row: 1; gap: 8px; padding: 6px 0 22px; }
+  .steps i { position: relative; opacity: 1; background: rgba(241, 238, 255, 0.2); transition: background 0.5s var(--e-shift); }
+  .steps i.on { background: var(--text); opacity: 1; }
+  .steps i span { display: block; position: absolute; top: 10px; inset-inline-start: 0; font: 400 11px/1 var(--mono); color: var(--mut); white-space: nowrap; }
+  .steps i.on span { color: var(--soft); }
+  .steps i.now span { color: var(--text); }
+
+  .tray { display: block; grid-column: 1; grid-row: 2 / 4; min-height: 0; margin-top: 16px; padding: 26px; border-radius: 20px; background: var(--night); overflow: hidden; position: relative;
+    box-shadow: inset 0 0 0 1px rgba(255, 180, 138, 0.2); transition: box-shadow 0.3s var(--e-shift); }
+  .tray .pa { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; min-height: 0; }
+  .view { grid-column: 2; grid-row: 2; padding: 30px 8px 30px 0; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+  .dock { grid-column: 2; grid-row: 3; padding: 26px 0 0; background: linear-gradient(to top, var(--night-deep) 72%, transparent); }
+  #app.flat .tray { display: none; }
+  #app.flat .view, #app.flat .dock { grid-column: 1 / -1; width: min(100%, 620px); justify-self: center; }
+
+  h1 { font-size: clamp(40px, 3.5vw, 52px); }
+  h1.small { font-size: clamp(34px, 2.9vw, 42px); }
+  .lead { font-size: 17px; max-width: 46ch; margin-top: 16px; }
+  .pick { max-width: 340px; }
+
+  /* Start: three facts under the opening lines; the glass lies in the tray, where a paper can be dropped. */
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; list-style: none; padding: 0; margin: 30px 0 12px; }
+  .facts li { font: 400 12px/1.5 var(--mono); color: var(--mut); padding-top: 12px; box-shadow: inset 0 1px 0 rgba(255, 180, 138, 0.3); }
+  .facts li b { display: block; font: 600 15px/1.3 var(--body); color: var(--text); margin-bottom: 4px; }
+  .tray .obj { align-self: flex-start; flex: none; width: min(100%, 74dvh, 640px); margin: 0 0 0 50%; }
+  .tray .obj.small { width: min(54%, 42dvh, 320px); }
+  .drophint { font: 400 12px/1.5 var(--mono); color: var(--mut); text-align: center; max-width: 38ch; margin-top: -34px; position: relative; }
+  .drophint b { display: none; font-weight: 500; color: var(--rim); }
+  #app.dropping .tray { box-shadow: inset 0 0 0 2px var(--rim), inset 0 0 70px rgba(255, 180, 138, 0.14); }
+  #app.dropping .drophint span { display: none; }
+  #app.dropping .drophint b { display: inline; }
+
+  /* Hide your name: the page takes the whole tray. */
+  .tray .pagebar { width: 100%; margin-top: 0; flex: none; }
+  .tray .stagewrap { margin: 0; min-height: 0; }
+  .tray .stage img { max-height: calc(100dvh - 340px); }
+  .tray .links.left, .tray .foot { align-self: flex-start; margin-top: 0; flex: none; }
+  .tray .foot:empty { display: none; }
+  .tray .slab, .tray .slab.low { width: min(44%, 46dvh, 300px); margin: 0; flex: none; }
+
+  /* The copied paper fills the tray; the person's own photo is one switch away. */
+  .tray .paper { width: 100%; flex: 1; height: auto; min-height: 0; margin-top: 0; }
+  .tray .sheet pre { font-size: 12.5px; padding: 22px 24px 60px; }
+  .seg { display: flex; align-self: flex-start; gap: 6px; flex: none; }
+  .seg button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: none; font: 500 12px/1 var(--mono); color: var(--mut); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+  .seg button.on { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--rim); }
+  .photoview { flex: 1; min-height: 0; width: 100%; overflow: auto; border-radius: 6px; background: var(--paper); scrollbar-width: thin; }
+  .photoview img { display: block; width: 100%; }
+  .photoview img + img { margin-top: 8px; }
+  .tray .two { width: min(100%, 540px); flex: none; }
+
+  /* Sheets open as a centred page over the desk. */
+  .over { padding: 24px max(40px, calc((100vw - 900px) / 2)) 40px; }
+  .over .headrow { margin: 0 -10px; display: flex; }
+  .over.dark .body { columns: 2; column-gap: 12px; }
+  .over.dark .body h1 { column-span: all; margin-bottom: 12px; }
+  .over.dark .plate { break-inside: avoid; margin: 0 0 10px; }
+  /* A screen with no paper side (a stopped reading) keeps its one action right under the words. */
+  #app.flat { grid-template-rows: auto auto auto; align-content: start; }
+}
+
+/* A pointer hovers; a finger does not. */
+@media (hover: hover) {
+  .btn:hover { filter: brightness(1.07); }
+  .btn.ghost:hover { filter: none; background: rgba(255, 255, 255, 0.07); }
+  .link:hover, .more:hover { text-decoration-color: var(--rim); }
+  .textbtn:hover, .lang button:hover, .seg button:hover { color: var(--text); }
+  .line:hover { background: rgba(255, 255, 255, 0.06); }
 }
 
 /* Motion. Things arrive, swap or clear; nothing only fades. */

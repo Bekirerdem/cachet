@@ -26,11 +26,11 @@ Cachet is built around that finding. The model is never asked to rewrite the pap
 
 ## How it works
 
-1. **Photo.** You photograph each page. The image is scaled down and re-encoded on the phone, which drops location and camera data.
+1. **Paper.** On a phone you photograph each page; on a computer you choose, drop or paste a photo, a scan or a PDF. The image is scaled down and re-encoded on the device (a PDF is drawn page by page in the browser), which drops location and camera data.
 2. **Hide your name.** You drag a box over the lines that identify you. The boxes are burned into the pixels before encryption, so the model never receives that area.
 3. **Sealed sending.** The browser fetches the hardware evidence for the model (Intel TDX, NVIDIA GPU), verifies it, and encrypts the page to the key that the evidence vouches for. Our server forwards ciphertext and adds the API key. It refuses any request that is not encrypted this way.
 4. **Copy, twice.** Two vision models, each inside its own enclave, copy what is printed: text, lab rows, values, ranges. They work on their own; neither sees the other's copy. They are told to copy, not to explain.
-5. **Same as the paper?** Code compares the two copies character by character. You compare every line with your paper and confirm or correct it. Where the two readers differ you see both readings, with the differing characters marked, and choose; such a line cannot be confirmed with one tap. A line you do not confirm does not enter the plan.
+5. **Same as the paper?** Code compares the two copies character by character and shows you every copied line in one list. The lines both readers copied the same, on a page both could read, you look over and confirm together with one tap; any line opens under the lens to be corrected or left out. Everything else you settle one line at a time: where the two readers differ you see both readings, with the differing characters marked, and choose, and the same goes for a line only one reader has, a row a reader could not read, and the instructions on a page with unreadable parts. A line you do not confirm does not enter the plan. A page the first reader takes for something other than a medical paper (a receipt, a bill, a photo with no document) is not read further; neither is one it is unsure about when the second reader says it is not medical.
 6. **Plan.** From the confirmed text, the model points at the instructions: medicines, follow-ups, cautions. Each entry must carry the exact line it came from. Code then checks every entry against the page (see below) and retells it in your language.
 7. **Proof.** You see what was verified. The model's signature over the encrypted exchange is recorded on NEAR, where the contract verifies it again.
 
@@ -55,19 +55,21 @@ One thing does come from the model's general knowledge: the kind of a medicine (
 
 No account, no key, no wallet. The samples are fictional.
 
-**In the browser** (https://cachet.l3ekirerdem.workers.dev, on a phone or in a narrow window):
+**In the browser** (https://cachet.l3ekirerdem.workers.dev). On a phone it is one column. In a window 1000 px or wider the paper lies on the left and the words about it stand on the right; pointing at a copied line or a plan entry moves the lens to that line on the paper, and a file can be dropped anywhere on the page.
 
 | Do | See |
 |---|---|
 | Open the page | "Home from the hospital. What do the papers say?" and one main button |
 | Tap **Try a sample letter** | "Hide your name" with the photographed German discharge letter |
 | Tap **Hide the top strip**, then **Send the page sealed** | A black box over the top of the page, then three checks arriving: "Hardware checked, passed" with the seconds it took on your device, "Page encrypted" with the size of the ciphertext that left, "Model reading" |
-| Wait about 30 seconds | A fourth check, "Second reader", ending with "Both readers copied every line the same." Then "Same as the paper?" with the first line under the lens: `Amoxicillin/Clavulansäure 875/125 mg 1-0-1 bis einschließlich 10.11.2026.` split into medicine, dose, when, for how long |
-| Tap **Same** for each of the 5 lines (or **Correct it**, or **Leave this line out**), then **Make my plan** | "Your home plan": Morning with Amoxicillin/Clavulansäure 875/125 mg and Ramipril 5 mg, Evening with Amoxicillin/Clavulansäure and Atorvastatin 20 mg, the X-ray check-up in 6 weeks, when to come back, and "Ramipril: the paper does not say for how long" |
+| Wait about 30 seconds | A fourth check, "Second reader", ending with "Both readers copied every line the same." Then "Same as the paper?" with the 5 copied lines in a list, the first one `Amoxicillin/Clavulansäure 875/125 mg 1-0-1 bis einschließlich 10.11.2026.` |
+| Tap a line | That line under the lens, split into medicine, dose, when, for how long, with **Same**, **Correct it** and **Leave this line out** |
+| Go back to **All lines** and tap **All 5 match. Make my plan** | "Your home plan": Morning with Amoxicillin/Clavulansäure 875/125 mg and Ramipril 5 mg, Evening with Amoxicillin/Clavulansäure and Atorvastatin 20 mg, the X-ray check-up in 6 weeks, when to come back, and "Ramipril: the paper does not say for how long" |
 | Tap any line of the plan | The line of the paper it came from |
 | Tap **See the proof** | Intel TDX `UpToDate`, NVIDIA `verified`, both readers with their models and signing keys, six signed answers, and six chain records, each a link to the transaction on NEAR testnet |
 | Choose another language under **Write it in another language** | The same plan rewritten and checked again; Arabic is laid out right to left |
 | Go home and tap **Try a sample lab page** | 12 rows of a Turkish lab report; after you confirm them, each row is placed in, above or below the range printed on the page |
+| Give it a photo of a till receipt | "The reading stopped. This does not look like a medical paper." |
 
 **On the command line** (Node 24 or later):
 
@@ -188,17 +190,18 @@ The model keys are printed by `npm run verify-tee`. Set `NEAR_ACCOUNT_ID` and `R
 
 ## What is new and what is baseline
 
-Everything in this repository was written during the hackathon window (first code on 12 Nov 2026). Dependencies: [`@nearai/inference-sdk`](https://www.npmjs.com/package/@nearai/inference-sdk) (attestation, encryption, signatures), [`near-sdk`](https://crates.io/crates/near-sdk) (contract), [`near-api-js`](https://www.npmjs.com/package/near-api-js) (deployment and receipts), [Vite](https://vite.dev) and three bundled variable fonts (Geologica, Schibsted Grotesk, JetBrains Mono).
+Everything in this repository was written during the hackathon window (first code on 12 Nov 2026). Dependencies: [`@nearai/inference-sdk`](https://www.npmjs.com/package/@nearai/inference-sdk) (attestation, encryption, signatures), [`near-sdk`](https://crates.io/crates/near-sdk) (contract), [`near-api-js`](https://www.npmjs.com/package/near-api-js) (deployment and receipts), [Vite](https://vite.dev), [PDF.js](https://mozilla.github.io/pdf.js/) (draws a PDF's pages in the browser) and three bundled variable fonts (Geologica, Schibsted Grotesk, JetBrains Mono).
 
 AI assistance: the code was written with Claude Code, directed and reviewed by the author. The 3D images in the interface were generated with Gemini.
 
 ## Limits
 
 - Printed documents only. Handwriting is reported as unreadable.
+- It reads what is on the page; it cannot tell whether a paper is genuine. Three AI-generated images of medical papers (a lab report, a discharge letter, a handwritten prescription) were read like any other paper on 14 Nov 2026, invented test names included, and neither model remarked on them. In the same run a till receipt, a utility bill and a photo of a cat were refused by both models as not medical, and a page too blurred to read came back with no text, which the app stops as unreadable. Seven images, not a benchmark; only the receipt was also run through the app itself.
 - Omissions are possible: the plan can miss a line that is on the paper. The copied text of the paper is always one tap away for that reason.
 - The kind of a medicine is general knowledge from the model, not from the paper.
 - Testnet only. The receipts contract trusts an owner-maintained list of enclave keys.
-- Not yet used on a physical phone by anyone but the author's browser tests: camera capture, finger-drawn boxes, installing to the home screen and the share sheet were exercised in desktop Chrome at phone size only.
+- Not yet used on a physical phone by anyone but the author's browser tests: camera capture, finger-drawn boxes, installing to the home screen and the share sheet were exercised in desktop Chrome at phone size only. Dropping and pasting a file were not exercised by script; choosing a file, a two-page PDF and the wide layout were.
 - Two models read each page, but both can miss the same line or misread it the same way. If the second reader does not answer within 90 seconds the paper goes on with one reader, and the app says so on the comparison, the plan and the proof.
 - The code-written words of the plan in German, Spanish, French, Arabic, Russian and Japanese are unreviewed translations.
 - The public demo runs on a fixed credit: 800 model calls a day, then it answers "today's free readings are used up".

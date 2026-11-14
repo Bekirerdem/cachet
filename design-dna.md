@@ -2,8 +2,8 @@
 
 Written from the built app (`web/src/style.css`, `web/src/main.js`), not from intent. It is the
 "frosted glass" direction, chosen from three that were explored. Phone first: the design is one
-column, 390 px wide by 844 px tall; on a wide screen it stays a phone column (max 430 px)
-centred on a darker ground.
+column, 390 px wide by 844 px tall. A window 1000 px or wider gets its own layout, the desk
+(see LAYOUTS); between the two the column stays, centred.
 
 The idea in one sentence: the paper is frosted to everyone, and clear only under the lens,
 on the line you are checking.
@@ -55,11 +55,12 @@ everywhere; no all-caps labels.
 - **HERO** (start): heading, two lines of copy, the rendered glass slab filling the middle.
 - **STAGE** (hide your name): the photo, centred, with black boxes the person draws; page chips above it.
 - **SLAB + CHECKS** (sending, writing): the person's own page behind a frosted slab, plates below that fill in as each real check passes. Sending has four (hardware, encryption, first reader, second reader), so its slab is the small one.
-- **PAPER + LENS** (same as the paper?): the copied text, blurred, in a paper panel; a clear band over the line being checked; one plate under it with that line's fields; the two decisions in the dock.
+- **LINES** (same as the paper?, the way in): one plate with a sentence saying what stands below, then every copied line in one plate, in mono, split by hairlines; a lab row shows its name with the range under it and the result on the right. A line carries a status word only when it has one (look closer, same, corrected by you, left out). The dock's one button confirms the lines two readers copied the same and goes on to the plan; while lines need a closer look, the button leads through those first.
+- **PAPER + LENS** (same as the paper?, one line): the copied text, blurred, in a paper panel; a clear band over the line being checked; one plate under it with that line's fields; the two decisions in the dock. In one column the paper panel shows only here; the list stands in for it.
 - **TWO READINGS** (same as the paper?, only where the two readers differ): a plate with a peach rim and no clear frost; one plain sentence saying the readers differ; then the two readings. Lab rows stand in two columns, field under field, split by a hairline; longer lines stand one above the other. The characters that differ are marked in peach in both. The dock holds two outlined buttons of equal weight, one per reader, and no filled button: neither reading is the default. A line both readers copied the same carries one quiet mono line saying so and keeps the usual pair.
 - **PLATES** (plan, proof, how it works): a column of plates, each with a mono label; rows open to show the line from the paper.
 - **SHEET** (copied text, photo, sheet for the doctor): a paper-coloured sheet rising over a dimmed, blurred app; the doctor's sheet is the only thing that prints (A4, 18 mm margins, black on white).
-- **SIDE** (windows 1000 px and wider): the app stays a phone column; to its left, a light display heading, two lines of copy and three short facts under hairlines. Below 1000 px there is only the column.
+- **DESK** (windows 1000 px and wider): no phone in a frame. The ground is night deep; a head row carries the wordmark, the five steps with their names, and the language. Below it, two columns of a 1200 px measure. Left, the tray: one night-coloured surface with a hairline peach rim, as tall as the window allows, holding the paper side of the step (the glass on the first screen, the page while names are hidden, the slab while it is sent, the copied paper with the lens afterwards, the frost and the two limits on the proof). Right, the words: heading, plates, and the one action at the foot of the column. With a pointer, pointing at a copied line or a plan entry sweeps the lens to that line in the tray; a file dragged over the window lights the tray's rim. A switch above the paper shows the person's own photo in its place. Sheets open as a centred page 900 px wide. A screen with no paper side (a stopped reading) is one centred column.
 
 ## MOTION
 

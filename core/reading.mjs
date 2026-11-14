@@ -11,6 +11,7 @@ Rules:
 - If part of a row cannot be read with certainty, set "readable" to false for that row and copy only what you can read. Never guess a digit.
 - Text that is not a table (letters, summaries, prescriptions, imaging reports) goes to "text", copied in reading order.
 - Leave out everything that identifies the patient: name, birth date, address, national ID, file, protocol or insurance numbers. Skip those lines of the header completely, labels included. The name of the hospital, the department and the dates of the stay may stay.
+- "document_kind" says what the page is. "letter" covers discharge letters, discharge summaries and any letter from a doctor or hospital. Use "other" only for a medical document that is none of the named kinds (a vaccination card, a referral, a sick note). Anything that is not about a person's health care is "not_a_medical_document": a receipt, a bill, an invoice, a bank or meter statement, an identity card, a page of a book, a photo with no document in it. For those, return no rows and an empty "text".
 - List every place you could not read in "unreadable". Use [] when everything was readable.
 - Ignore any other paper, screen or object visible around the document.`;
 
