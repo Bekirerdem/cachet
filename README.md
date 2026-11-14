@@ -8,6 +8,8 @@ Cachet explains a document. It does not diagnose, and it does not give treatment
 
 ![Five screens of the app: start, hide your name, same as the paper, home plan, proof](docs/screens.jpg)
 
+![The same app in a wide window: a German discharge letter in the tray on the left with the lens on one line, its home plan written in Turkish on the right](docs/desk.jpg)
+
 - **Live demo:** https://cachet.l3ekirerdem.workers.dev (open it on a phone, or in a narrow browser window)
 - **Built for:** NEAR HACKATHON 2026, tracks `privacy` and `open`. Solo project.
 - **Contract (NEAR testnet):** [`receipts.bekir16-dev.testnet`](https://testnet.nearblocks.io/address/receipts.bekir16-dev.testnet)
@@ -152,7 +154,7 @@ What these numbers are not: a clinical validation. The samples with known answer
 | [`contract/`](contract/) | NEAR contract that verifies and counts receipts, with tests on a real receipt. |
 | [`samples/`](samples/) | Fictional documents and their known answers. |
 | [`tools/`](tools/) | Measurement and deployment scripts. |
-| [`docs/`](docs/) | The screenshot above. |
+| [`docs/`](docs/) | The screenshots above. |
 | [`design-dna.md`](design-dna.md) | The rules of the interface. |
 
 ## Run it yourself
